@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * PlacePrep design tokens.
+ *
+ * Direction: a precise, exam-room-calm dev-tool aesthetic (Linear / Raycast /
+ * Vercel Dashboard register) rather than a generic SaaS palette. Dark is the
+ * primary surface; light is a first-class second mode, not an afterthought.
+ *
+ * Accent is a single confident violet — distinct from the teal/blue default
+ * most ed-tech tools reach for, and reads as "intelligence" without being a
+ * cliché electric blue. Correct/incorrect states borrow directly from the
+ * product's own domain (graded answers), not from generic alert colors.
+ */
+@theme {
+  --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+
+  --color-accent-50: #f4f1ff;
+  --color-accent-200: #d4c9fb;
+  --color-accent-400: #9c85f0;
+  --color-accent-500: #7c5cf0;
+  --color-accent-600: #6e56cf;
+  --color-accent-700: #5a45ab;
+
+  --color-correct-500: #2dd4a7;
+  --color-correct-600: #1bab85;
+  --color-incorrect-500: #f0608a;
+  --color-incorrect-600: #d6406d;
+  --color-warning-500: #e8a23d;
+
+  --animate-fade-up: fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.3s ease-out both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-surface: hsl(var(--surface));
+  --color-surface-raised: hsl(var(--surface-raised));
+  --color-border: hsl(var(--border));
+  --color-border-subtle: hsl(var(--border-subtle));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-ring: hsl(var(--ring));
+}
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 8%;
+  --surface: 240 20% 98.5%;
+  --surface-raised: 0 0% 100%;
+  --border: 240 12% 89%;
+  --border-subtle: 240 12% 93%;
+  --muted: 240 6% 46%;
+  --muted-foreground: 240 6% 40%;
+  --ring: 255 75% 64%;
+}
+
+.dark {
+  --background: 240 14% 7%;
+  --foreground: 240 10% 94%;
+  --surface: 240 13% 10%;
+  --surface-raised: 240 12% 13%;
+  --border: 240 10% 19%;
+  --border-subtle: 240 10% 16%;
+  --muted: 240 6% 64%;
+  --muted-foreground: 240 6% 58%;
+  --ring: 255 80% 70%;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  ::selection {
+    background-color: var(--color-accent-200);
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
