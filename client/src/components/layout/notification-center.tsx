@@ -1,4 +1,4 @@
-import { Bell } from "lucide-react";
+import { Bell, Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,12 @@ import { cn } from "@/lib/utils";
 import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications } from "@/hooks/use-notifications";
 
 export function NotificationCenter() {
-  const { data } = useNotifications();
+  // FIX: previously this destructured only `data`, so on first render (before
+  // the query resolves) `notifications` was `[]` and the dropdown briefly
+  // flashed "No notifications" before the real list arrived. Checking
+  // `isLoading` first shows a proper loading state instead of a false empty
+  // state.
+  const { data, isLoading } = useNotifications();
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
   const navigate = useNavigate();
@@ -46,7 +51,12 @@ export function NotificationCenter() {
           )}
         </div>
         <DropdownMenuSeparator className="my-0" />
-        {notifications.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading notifications…
+          </div>
+        ) : notifications.length === 0 ? (
           <EmptyState icon={Bell} title="No notifications" className="border-none px-4 py-8" />
         ) : (
           <ul className="max-h-80 overflow-y-auto py-1">

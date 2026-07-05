@@ -1,8 +1,7 @@
 """
 Profile endpoints. The row itself is created automatically by the
 `handle_new_user()` Postgres trigger the moment Supabase Auth creates the
-`auth.users` row (see supabase/migrations/0001_sprint3_schema.sql) — there
-is deliberately no POST/create endpoint here.
+`auth.users` row — there is deliberately no POST/create endpoint here.
 """
 from typing import Any, Dict, Optional
 
@@ -18,13 +17,7 @@ from app.core.supabase_client import get_supabase_admin
 
 router = APIRouter()
 
-# Matches the fixed, closed role set seeded in migration 0001 — a role_id ->
-# name mapping here avoids a join for a set this small and this stable.
 _ROLE_NAMES = {1: "student", 2: "alumni", 3: "admin"}
-
-# Fields that factor into profile completion. `full_name` and `email` are
-# always present (Google supplies them), so only the genuinely optional
-# fields count toward the percentage.
 _COMPLETABLE_FIELDS = ("avatar_url", "college", "department", "year")
 
 
@@ -82,10 +75,6 @@ def _fetch_profile_row(user_id: str) -> Dict[str, Any]:
             .execute()
         )
     except APIError as exc:
-        # postgrest raises (rather than returning data=None) when .single()
-        # matches zero rows — PGRST116. Should not normally happen, since
-        # the auth trigger creates this row at sign-up time, but the
-        # client's JWT could theoretically outlive a since-deleted profile.
         if exc.code == "PGRST116":
             raise NotFoundError("Profile not found. Please sign out and sign in again.")
         raise

@@ -1,4 +1,4 @@
-﻿import * as React from "react";
+import * as React from "react";
 import { GraduationCap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";

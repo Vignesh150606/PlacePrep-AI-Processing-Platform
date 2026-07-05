@@ -11,7 +11,6 @@ PlacePrep/
   shared/     Shared TypeScript contracts and constants
   supabase/   SQL migrations, policies, and seed data
   docs/       Architecture and implementation notes
-  docker/     Docker support files
 ```
 
 ## Development
@@ -28,4 +27,7 @@ Run all JavaScript workspaces:
 pnpm dev
 ```
 
-The backend uses Python dependencies listed in `server/requirements.txt`.
+The backend uses Python dependencies listed in `server/requirements.txt` —
+see `server/README.md` for the full setup and deploy checklist (including
+the CORS/Supabase redirect-URL gotchas that most commonly bite on first
+deploy).

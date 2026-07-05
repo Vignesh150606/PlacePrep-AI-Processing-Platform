@@ -1,10 +1,5 @@
 """
 Extracts plain text from a PDF's raw bytes.
-
-Deliberately its own module, separate from the AI provider layer: the
-pipeline always hands the AIProvider plain text, never a PDF file, so a
-future provider that can't accept PDF attachments (or one that's cheaper to
-call with text) works without changes here.
 """
 import io
 import logging
@@ -43,9 +38,6 @@ def extract_text(pdf_bytes: bytes) -> str:
     text = "\n\n".join(t for t in pages_text if t.strip())
 
     if not text.strip():
-        # Most likely a scanned/image-only PDF. OCR is out of scope for this
-        # sprint (see technical debt notes) — surface a clear, actionable
-        # error instead of silently producing zero questions.
         raise PdfTextExtractionError(
             "No selectable text found in this PDF. Scanned/image-only PDFs "
             "aren't supported yet — OCR is planned for a future sprint."

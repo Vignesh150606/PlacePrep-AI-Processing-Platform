@@ -1,32 +1,35 @@
-# React + TypeScript + Vite
+# PlacePrep — Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 + Vite + TanStack Router/Query frontend for PlacePrep.
 
-Currently, two official plugins are available:
+## Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+pnpm install
+pnpm dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Copy `.env.example` to `.env.local` and fill in your Supabase project URL,
+publishable key, and the backend's base URL before running.
+
+## Scripts
+
+- `pnpm dev` — start the Vite dev server (http://localhost:5173)
+- `pnpm build` — typecheck (`tsc -b`) then production build
+- `pnpm typecheck` — `tsc -b --noEmit`
+- `pnpm lint` — oxlint
+
+## Structure
+
+See `src/components`, `src/pages`, `src/hooks`, `src/providers`, and
+`src/lib` — routing is centralized in `src/router.tsx`, and every real
+(non-mock) API call goes through `src/lib/api-client.ts`, which attaches
+the current Supabase session's JWT as a Bearer token automatically.
+
+## Deploying (Vercel, or similar)
+
+`VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_PUBLISHABLE_KEY`
+must be set in your hosting provider's **production** environment variables
+(not just a local `.env.local`) and the app **rebuilt** afterward — Vite
+bakes `VITE_*` vars into the build at build time, so adding them without
+triggering a new deploy has no effect.

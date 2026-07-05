@@ -3,8 +3,7 @@ The pipeline (Steps 4-11): Queued -> Processing -> AI Extraction ->
 Validation -> Duplicate Detection -> Classification -> Storage ->
 Cleanup -> Notification.
 
-Two entry points, both called from `app/api/v1/endpoints/pdfs.py` /
-`processing.py`:
+Two entry points, both called from `app/api/v1/endpoints/pdfs.py`:
 
   create_job(pdf_resource_id)  — inserts a new `processing_jobs` row for
                                   a fresh attempt (initial upload or retry).
@@ -225,8 +224,6 @@ def _finish_success(
         }
     ).eq("id", pdf_id).execute()
 
-    # Cleanup (Step 10): temporary PDFs are deleted after a successful
-    # extraction; KEEP_PERMANENT-marked PDFs are left in storage.
     if not pdf_row.get("keep_permanent"):
         try:
             admin.storage.from_(settings.PDF_STORAGE_BUCKET).remove([pdf_row["storage_path"]])

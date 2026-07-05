@@ -6,10 +6,6 @@ asymmetric ES256 key pair rather than a shared HS256 secret. That means
 verification only ever needs the *public* half of the key, fetched once
 from Supabase's JWKS endpoint and cached in-process by `PyJWKClient` —
 no network call to Supabase on every request, and no secret to leak.
-
-`PyJWKClient` handles the fetch-and-cache itself; we don't hand-roll caching
-here to avoid the two independent caches (ours + Supabase's own 10-minute
-edge cache mentioned in their docs) getting out of sync.
 """
 from functools import lru_cache
 from typing import Any, Dict
@@ -30,11 +26,7 @@ def _get_jwks_client() -> PyJWKClient:
 
 
 def verify_access_token(token: str) -> Dict[str, Any]:
-    """Verify signature, expiry, audience, and issuer. Returns the decoded claims.
-
-    Raises `UnauthorizedError` for any failure — expired, malformed, wrong
-    audience/issuer, or a signature that doesn't match Supabase's public key.
-    """
+    """Verify signature, expiry, audience, and issuer. Returns the decoded claims."""
     settings = get_settings()
     if not settings.is_supabase_configured:
         raise UnauthorizedError("Supabase is not configured on this server.")

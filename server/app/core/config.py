@@ -31,8 +31,14 @@ class Settings(BaseSettings):
     # comma-separated string in .env would crash here even with a "before"
     # validator. Keeping this as `str` and exposing `cors_origins` below
     # (a plain property, parsed after settings load) sidesteps that.
-    # Comma-separated in the env var, e.g.
-    # CORS_ORIGINS=http://localhost:5173,https://app.placeprep.dev
+    #
+    # PRODUCTION NOTE (learned the hard way): this defaults to the local Vite
+    # dev origin. On every deployed environment (Render, etc.) you MUST set
+    # CORS_ORIGINS explicitly to your real frontend origin(s), comma-separated,
+    # e.g. CORS_ORIGINS=https://your-app.vercel.app — otherwise every browser
+    # request from the deployed frontend will be silently blocked by CORS
+    # with no server-side error logged. `create_app()` in main.py logs a
+    # startup warning if this looks unconfigured in production.
     CORS_ORIGINS: str = "http://localhost:5173"
 
     @property
@@ -73,9 +79,6 @@ class Settings(BaseSettings):
         return [t.strip() for t in self.ALLOWED_PDF_MIME_TYPES.split(",") if t.strip()]
 
     # --- AI provider (Step 2/3) ---
-    # Which provider AIService dispatches to. Adding a new provider means
-    # adding a new value here + a new class in app/services/ai/ — nothing
-    # in the pipeline itself changes.
     AI_PROVIDER: Literal["gemini"] = "gemini"
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-2.0-flash"
@@ -84,19 +87,8 @@ class Settings(BaseSettings):
     def is_ai_configured(self) -> bool:
         return bool(self.GEMINI_API_KEY)
 
-    # Questions scoring below this confidence go to 'pending-review' instead
-    # of 'approved' (Step 7). Configurable per-deployment without a redeploy
-    # of the classification logic itself.
     AI_CONFIDENCE_THRESHOLD: float = 0.7
-
-    # Near-duplicate trigram similarity threshold (Step 6). 1.0 = identical
-    # text; content_hash already catches that case. This catches reworded
-    # near-duplicates. Tuned conservatively (high bar) to avoid false-positive
-    # rejections of genuinely distinct questions that just share vocabulary.
     DUPLICATE_SIMILARITY_THRESHOLD: float = 0.87
-
-    # Retry budget for a failed extraction attempt (transient AI/network
-    # errors) before a job is left in 'failed' for manual retry.
     MAX_EXTRACTION_ATTEMPTS: int = 3
 
 

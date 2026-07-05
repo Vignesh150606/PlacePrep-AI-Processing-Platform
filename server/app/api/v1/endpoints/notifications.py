@@ -1,7 +1,6 @@
 """
 Notification read endpoints — the counterpart to `app.services.notifications`
-(which only writes). Wires the existing `NotificationCenter` frontend
-component (previously mock-data-only) to the rows the pipeline now creates.
+(which only writes).
 """
 from typing import List, Optional
 

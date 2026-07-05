@@ -5,12 +5,6 @@ interface ComingSoonPageProps {
   title: string;
 }
 
-/**
- * Placeholder for nav destinations outside Sprint 1A scope (Dashboard,
- * Question Bank, Quiz, Company Details). Keeps every sidebar link
- * functional — no broken routes — without faking finished pages for
- * features that haven't been designed yet.
- */
 export function ComingSoonPage({ title }: ComingSoonPageProps) {
   return (
     <div className="flex flex-col gap-6">

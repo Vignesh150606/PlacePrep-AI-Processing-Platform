@@ -1,12 +1,5 @@
 """
-Processing Dashboard (Step 9). Admin-gated: this surfaces platform-wide
-job/question data across every user's uploads, not just the caller's own.
-
-Aggregate stats are computed in Python over bounded queries rather than a
-Postgres RPC function — simple and fast enough at this project's scale.
-Technical debt note: move to a SQL view / RPC with real aggregates
-(`avg()`, `count() ... group by`) before this needs to scale past a few
-thousand questions.
+Processing Dashboard (Step 9). Admin-gated.
 """
 from typing import Dict, List, Optional
 

@@ -14,6 +14,7 @@ async def health_check() -> ApiResponse[dict]:
         data={
             "environment": settings.ENVIRONMENT,
             "supabase_configured": settings.is_supabase_configured,
+            "ai_configured": settings.is_ai_configured,
         },
         message="PlacePrep API is running.",
     )

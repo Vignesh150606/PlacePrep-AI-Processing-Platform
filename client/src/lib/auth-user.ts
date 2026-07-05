@@ -1,4 +1,4 @@
-﻿import type { User as SupabaseUser } from "@supabase/supabase-js";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 export interface AuthUser {
   id: string;
@@ -7,16 +7,15 @@ export interface AuthUser {
   avatarUrl: string | null;
 }
 
-const FALLBACK_NAME = "Vignesh M";
-
 export function toAuthUser(user: SupabaseUser | null): AuthUser | null {
   if (!user) return null;
 
   const metadata = user.user_metadata ?? {};
+  const fallbackName = user.email ? user.email.split("@")[0] : "there";
   const fullName =
     (typeof metadata.full_name === "string" && metadata.full_name) ||
     (typeof metadata.name === "string" && metadata.name) ||
-    FALLBACK_NAME;
+    fallbackName;
   const avatarUrl =
     (typeof metadata.avatar_url === "string" && metadata.avatar_url) ||
     (typeof metadata.picture === "string" && metadata.picture) ||

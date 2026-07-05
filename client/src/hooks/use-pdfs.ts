@@ -7,9 +7,6 @@ interface PdfListResponse {
   total: number;
 }
 
-// Any PDF still mid-pipeline gets polled so status badges update without a
-// manual refresh — same idea as the RecentPdfsCard's spinner, just backed
-// by real data now.
 const HAS_IN_FLIGHT_JOB = (items: PDFResource[] | undefined) =>
   (items ?? []).some((p) => p.processingStatus === "queued" || p.processingStatus === "processing");
 

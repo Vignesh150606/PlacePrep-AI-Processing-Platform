@@ -16,14 +16,6 @@ _bearer_scheme = HTTPBearer(
 
 
 class CurrentUser(BaseModel):
-    """The verified identity from a Supabase access token.
-
-    Deliberately lighter than the full `Profile` row — this is what every
-    protected endpoint gets just from a valid JWT, no database query
-    required. Endpoints that need the full profile (college, department,
-    role, etc.) fetch it separately via `get_supabase_admin()`.
-    """
-
     id: str
     email: Optional[str] = None
 

@@ -15,7 +15,6 @@ export interface CalendarEvent {
   startAt: ISODateString;
   endAt: ISODateString | null;
   isAllDay: boolean;
-  /** Null for official/admin-created events (company visits, OAs). */
   createdById: UUID | null;
   description: string | null;
 }

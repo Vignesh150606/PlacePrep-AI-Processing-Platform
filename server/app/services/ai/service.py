@@ -1,13 +1,5 @@
 """
 AIService — the single entry point the pipeline calls into.
-
-    AIService -> AIProvider -> GeminiProvider
-
-Adding a second provider (OpenAI, Claude, Llama) is: write
-`app/services/ai/openai_provider.py` implementing `AIProvider`, add one
-`elif` branch in `_build_provider` below, add the new value to
-`Settings.AI_PROVIDER`'s Literal type. `app/services/pipeline.py` and every
-API endpoint stay untouched.
 """
 from functools import lru_cache
 from typing import Optional

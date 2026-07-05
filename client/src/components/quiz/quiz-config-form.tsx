@@ -23,7 +23,9 @@ interface QuizConfigFormProps {
 }
 
 const topics = Array.from(new Set(mockQuestions.map((q) => q.topic))).sort();
-const QUESTION_COUNT_OPTIONS = [3, 5, 10] as const;
+// FIX (minor): the schema allows up to 20 questions, but the UI previously
+// only offered 3/5/10 — nobody could actually reach the schema's own max.
+const QUESTION_COUNT_OPTIONS = [3, 5, 10, 20] as const;
 
 export function QuizConfigForm({ onStart }: QuizConfigFormProps) {
   const { control, handleSubmit, watch } = useForm<QuizConfig>({

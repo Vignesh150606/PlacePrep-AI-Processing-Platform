@@ -1,17 +1,5 @@
 """
 Classification (Step 7).
-
-Turns the free-text `topic` / `subject` / `company` strings a provider
-returns into real foreign keys — creating `companies` / `subjects` /
-`topics` rows on first sight, reusing them on repeat — and decides whether
-a question is confident enough to auto-publish or should be held for
-review.
-
-`companies` already exists as a richer, admin-curated table (tier, roles,
-package data — see 0001_sprint3_schema.sql) — auto-creating a row here only
-fills in the columns this pipeline actually knows about (name/slug) and
-leaves the rest for an admin to enrich later, rather than trying to guess
-tier/package/roles from a PDF.
 """
 import re
 from dataclasses import dataclass
@@ -67,9 +55,6 @@ def _get_or_create_company(name: str) -> str:
     existing = admin.table("companies").select("id").eq("slug", slug).limit(1).execute()
     if existing.data:
         return existing.data[0]["id"]
-    # `tier` has no sensible default an AI extraction can infer responsibly —
-    # 'core' is the most common bucket for auto-created companies pending
-    # admin review, not a claim about the company's actual prestige tier.
     created = (
         admin.table("companies")
         .insert({"name": name.strip(), "slug": slug, "tier": "core"})

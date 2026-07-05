@@ -61,10 +61,6 @@ class GeminiProvider(AIProvider):
     name = "gemini"
 
     def __init__(self, api_key: str, model: str):
-        # Imported lazily so the whole app doesn't fail to boot if the
-        # google-genai package is present but no key is configured yet —
-        # AIService itself already guards on `settings.is_ai_configured`
-        # before ever constructing this class.
         from google import genai
 
         self._client = genai.Client(api_key=api_key)
@@ -92,9 +88,6 @@ class GeminiProvider(AIProvider):
         )
 
     def _build_prompt(self, document_text: str, source_hint: Optional[str]) -> str:
-        # Gemini Flash's context window comfortably fits a normal question
-        # paper, but truncate defensively — an oversized prompt should
-        # degrade to "extract what fits", never crash the request.
         truncated = document_text[:60_000]
         hint_line = f"Source filename: {source_hint}\n" if source_hint else ""
         return f"{_SYSTEM_PROMPT}\n\n{hint_line}Source text:\n\"\"\"\n{truncated}\n\"\"\""
@@ -114,11 +107,6 @@ class GeminiProvider(AIProvider):
         if not text:
             raise AIProviderError("Gemini returned an empty response.")
 
-        # One internal retry with a stricter reminder if the model wrapped
-        # the JSON in prose/markdown despite the JSON response_mime_type —
-        # this happens occasionally and is worth one extra call before
-        # surfacing a hard failure to the pipeline (Step 5: "retry when
-        # appropriate").
         if attempt == 1 and self._extract_json_array_text(text) is None:
             logger.warning("Gemini response was not valid JSON on first attempt; retrying once.")
             stricter = prompt + "\n\nReminder: respond with ONLY the raw JSON array, nothing else."

@@ -1,4 +1,4 @@
-﻿import {
+import {
   createRootRouteWithContext,
   createRoute,
   createRouter,

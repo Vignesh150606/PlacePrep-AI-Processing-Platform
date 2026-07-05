@@ -1,4 +1,4 @@
-﻿import * as React from "react";
+import * as React from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { AuthUser } from "@/lib/auth-user";
 

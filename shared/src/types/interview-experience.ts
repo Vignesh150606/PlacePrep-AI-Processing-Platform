@@ -25,7 +25,6 @@ export interface InterviewRound {
 export interface InterviewExperience {
   id: UUID;
   companyId: UUID;
-  /** Null when isAnonymous is true — author identity is not stored client-side either way. */
   authorId: UUID | null;
   isAnonymous: boolean;
   role: string;

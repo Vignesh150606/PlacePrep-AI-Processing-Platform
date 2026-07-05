@@ -8,10 +8,8 @@ export interface User {
   fullName: string;
   avatarUrl: string | null;
   role: UserRole;
-  /** null for non-student roles (alumni keep gradYear, admin does not). */
   graduationYear: number | null;
   branch: string | null;
-  /** Earned by contributing approved questions, experiences, and answers. */
   reputationPoints: number;
   createdAt: ISODateString;
   updatedAt: ISODateString;

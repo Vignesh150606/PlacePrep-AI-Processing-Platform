@@ -1,29 +1,8 @@
 -- =============================================================================
 -- PlacePrep — Sprint 4: AI Processing Platform
--- Run this in the Supabase SQL Editor AFTER 0001 and 0002 have succeeded.
--- Safe to re-run: every statement is idempotent.
---
--- What this adds:
---   1. Aligns pdf_resources.processing_status to the 5-state lifecycle the
---      frontend (`PdfProcessingStatus` in shared/) already models. 0001 had
---      an extra 'extracting' state that never made it into the shared type
---      — dropped here rather than adding it to the frontend, since
---      UPLOADED/QUEUED/PROCESSING/COMPLETED/FAILED is the contract this
---      sprint is required to implement on both sides.
---   2. Confidence + provenance columns on `questions` for the classification
---      step (Step 7) and duplicate-review flagging.
---   3. pg_trgm for fuzzy duplicate detection (Step 6) alongside the existing
---      exact-match `content_hash` unique constraint.
---   4. `processing_jobs` — one row per extraction attempt, giving the
---      dashboard (Step 9) queued/running/completed/failed counts and a
---      retry target, independent of the PDF's own current status.
---   5. Widens the `notifications` type enum for the extraction lifecycle
---      (Step 11).
+-- Run AFTER 0001 and 0002. Safe to re-run.
 -- =============================================================================
 
--- -----------------------------------------------------------------------------
--- 1. pdf_resources.processing_status — 5 states, matching shared/PdfProcessingStatus
--- -----------------------------------------------------------------------------
 alter table public.pdf_resources
   drop constraint if exists pdf_resources_processing_status_check;
 
@@ -37,9 +16,6 @@ create index if not exists pdf_resources_processing_status_idx
 create index if not exists pdf_resources_uploaded_by_idx
   on public.pdf_resources (uploaded_by);
 
--- -----------------------------------------------------------------------------
--- 2. questions — confidence + provenance
--- -----------------------------------------------------------------------------
 alter table public.questions
   add column if not exists confidence_score numeric(4, 3) not null default 1.0
     check (confidence_score >= 0 and confidence_score <= 1);
@@ -56,22 +32,11 @@ create index if not exists questions_source_pdf_id_idx
 create index if not exists questions_status_idx
   on public.questions (status);
 
--- -----------------------------------------------------------------------------
--- 3. Fuzzy duplicate detection — content_hash already catches byte-identical
---    text; trigram similarity catches near-duplicates (reworded options,
---    OCR noise) that hashing can't.
--- -----------------------------------------------------------------------------
 create extension if not exists pg_trgm;
 
 create index if not exists questions_question_text_trgm_idx
   on public.questions using gin (question_text gin_trgm_ops);
 
--- -----------------------------------------------------------------------------
--- 4. processing_jobs — one row per extraction attempt on a PDF.
---    `pdf_resources.processing_status` is the PDF's current state; this
---    table is the append-ish history that lets the dashboard show attempts,
---    retries, and per-attempt stats without overloading that single column.
--- -----------------------------------------------------------------------------
 create table if not exists public.processing_jobs (
   id uuid primary key default gen_random_uuid(),
   pdf_resource_id uuid not null references public.pdf_resources (id) on delete cascade,
@@ -112,14 +77,6 @@ create policy "processing_jobs_select_own_or_admin" on public.processing_jobs
     )
   );
 
--- No insert/update/delete policy for `processing_jobs`: every write goes
--- through the backend's service-role client (see app/core/supabase_client.py),
--- which bypasses RLS by design — same pattern as every other write path in
--- this schema.
-
--- -----------------------------------------------------------------------------
--- 5. notifications — widen the type enum for the extraction lifecycle
--- -----------------------------------------------------------------------------
 alter table public.notifications
   drop constraint if exists notifications_type_check;
 

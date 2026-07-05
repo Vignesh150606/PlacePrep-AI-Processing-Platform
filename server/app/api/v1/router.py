@@ -1,8 +1,6 @@
 """
 v1 API router — every versioned route is aggregated here, then mounted once
-in `app.main` under `settings.API_V1_PREFIX`. Keeping this as the single
-aggregation point means versioning a future v2 is a new sibling router, not
-a rewrite of `main.py`.
+in `app.main` under `settings.API_V1_PREFIX`.
 """
 from fastapi import APIRouter
 

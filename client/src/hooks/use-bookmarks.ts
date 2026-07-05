@@ -3,11 +3,12 @@ import type { BookmarkableType } from "@placeprep/shared";
 import { mockBookmarks } from "@/mocks/bookmarks";
 
 /**
- * In-memory only for Sprint 1A (mock data layer, no backend). Seeded from
- * mockBookmarks so the UI reflects "already bookmarked" state on load.
- * Swap the internals for a TanStack Query mutation once the bookmarks API
- * exists — the hook's external shape (isBookmarked/toggle) won't need to
- * change at call sites.
+ * In-memory only, same as before this polish pass. NOTE: a real `bookmarks`
+ * table + RLS policies already exist (see supabase/migrations/0002), but
+ * there is no `/api/v1/bookmarks` backend endpoint yet — wiring one up is a
+ * new feature (a small one, but still), so it's intentionally left out of
+ * this polish/bug-fix pass rather than added silently. Tracked as the
+ * natural next step in PROJECT_STATE.md.
  */
 export function useBookmarks() {
   const [bookmarkedIds, setBookmarkedIds] = React.useState<Set<string>>(

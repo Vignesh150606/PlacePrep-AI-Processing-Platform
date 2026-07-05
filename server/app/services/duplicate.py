@@ -1,18 +1,5 @@
 """
 Duplicate detection (Step 6).
-
-Two layers:
-  1. Exact match — a normalized hash of the question text, checked against
-     the DB-level `questions.content_hash` unique constraint. Cheap and
-     authoritative for byte-identical questions re-uploaded from the same
-     or a different PDF.
-  2. Fuzzy match — rapidfuzz similarity against a bounded candidate set
-     (same question type + difficulty, most recent N), for reworded
-     near-duplicates that hashing can't catch. A `pg_trgm` index already
-     exists on `questions.question_text` (migration 0003) for a future
-     SQL-side version of this at scale; doing the comparison in Python here
-     keeps this sprint's implementation simple and doesn't require a
-     bespoke Postgres RPC function.
 """
 import hashlib
 import re

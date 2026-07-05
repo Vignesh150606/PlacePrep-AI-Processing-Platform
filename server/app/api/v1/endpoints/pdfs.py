@@ -1,14 +1,6 @@
 """
-PDF Library endpoints — upload (Step 1, extended for this sprint) plus the
-list/retry/keep-permanent surface the AI Processing Platform needs.
-
-Upload flow: client uploads the file to this endpoint (never directly to
-Supabase Storage with a client-side key, and never straight to Gemini —
-see SECURITY in the sprint brief). This endpoint writes the file to the
-`pdfs` bucket via the service-role client, inserts the `pdf_resources` row,
-creates a `processing_jobs` row, and schedules the pipeline as a
-`BackgroundTask` so the HTTP response returns immediately with the new
-PDF in `queued` state.
+PDF Library endpoints — upload plus the list/retry/keep-permanent surface
+the AI Processing Platform needs.
 """
 import uuid
 from typing import Any, Dict, List, Optional
@@ -86,8 +78,6 @@ async def upload_pdf(
 ):
     settings = get_settings()
 
-    # Never trust the frontend's own check (shared/PDF_UPLOAD_CONSTRAINTS) —
-    # re-validate MIME type and size here, authoritatively.
     if file.content_type not in settings.allowed_pdf_mime_types:
         raise AppException("Only PDF files are accepted.", status_code=415)
 
@@ -152,9 +142,6 @@ async def retry_pdf(
     if row["processing_status"] != "failed":
         raise AppException("Only failed PDFs can be retried.", status_code=409)
     if row["uploaded_by"] != current_user.id:
-        # Owner or admin only — checked lazily here rather than via
-        # `require_admin` since a non-admin owner should still be able to
-        # retry their own failed upload.
         admin_check = (
             get_supabase_admin().table("profiles").select("role_id").eq("id", current_user.id).single().execute()
         )
