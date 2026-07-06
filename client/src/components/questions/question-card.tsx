@@ -3,20 +3,23 @@ import type { Question } from "@placeprep/shared";
 import { Card } from "@/components/ui/card";
 import { Badge, DifficultyBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { mockCompanies } from "@/mocks/companies";
 import { formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface QuestionCardProps {
   question: Question;
+  /**
+   * Resolved company display name. Passed in by the parent (which already
+   * has the real company list loaded) instead of this component looking it
+   * up in mocks/companies.ts — real question.companyId values are DB UUIDs
+   * and never matched the old mock ids anyway.
+   */
+  companyName?: string | null;
   isBookmarked?: boolean;
   onToggleBookmark?: (questionId: string) => void;
 }
 
-export function QuestionCard({ question, isBookmarked, onToggleBookmark }: QuestionCardProps) {
-  const company = question.companyId
-    ? mockCompanies.find((c) => c.id === question.companyId)
-    : undefined;
+export function QuestionCard({ question, companyName, isBookmarked, onToggleBookmark }: QuestionCardProps) {
   const accuracy =
     question.timesAttempted > 0 ? (question.timesCorrect / question.timesAttempted) * 100 : null;
 
@@ -25,9 +28,9 @@ export function QuestionCard({ question, isBookmarked, onToggleBookmark }: Quest
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5">
           <DifficultyBadge difficulty={question.difficulty} />
-          <Badge variant="neutral">{question.subject}</Badge>
-          <Badge variant="accent">{question.topic}</Badge>
-          {company && <Badge variant="neutral">{company.name}</Badge>}
+          {question.subject && <Badge variant="neutral">{question.subject}</Badge>}
+          {question.topic && <Badge variant="accent">{question.topic}</Badge>}
+          {companyName && <Badge variant="neutral">{companyName}</Badge>}
           {question.status === "pending-review" && (
             <Badge variant="warning">Pending review</Badge>
           )}

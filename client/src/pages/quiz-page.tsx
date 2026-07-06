@@ -1,11 +1,13 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { mockQuestions } from "@/mocks/questions";
+import { useQuestions } from "@/hooks/use-questions";
 import { QuizConfigForm, type QuizConfig } from "@/components/quiz/quiz-config-form";
 import { QuizRunner, type QuizRunnerResult } from "@/components/quiz/quiz-runner";
 import { QuizResult } from "@/components/quiz/quiz-result";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ClipboardX } from "lucide-react";
+import { ErrorState } from "@/components/ui/error-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ClipboardX, Sparkles } from "lucide-react";
 import type { Question } from "@placeprep/shared";
 
 type QuizStage =
@@ -13,23 +15,25 @@ type QuizStage =
   | { step: "active"; questions: Question[] }
   | { step: "results"; questions: Question[]; results: QuizRunnerResult[] };
 
-function selectQuestions(config: QuizConfig): Question[] {
-  let pool = mockQuestions;
+function selectQuestions(pool: Question[], config: QuizConfig): Question[] {
+  let filtered = pool;
 
   if (config.mode === "topic" && config.topic) {
-    pool = pool.filter((q) => q.topic === config.topic);
+    filtered = filtered.filter((q) => q.topic === config.topic);
   } else if (config.mode === "company" && config.companyId) {
-    pool = pool.filter((q) => q.companyId === config.companyId);
+    filtered = filtered.filter((q) => q.companyId === config.companyId);
   }
 
-  return pool.slice(0, config.questionCount);
+  return filtered.slice(0, config.questionCount);
 }
 
 export function QuizPage() {
+  const { data, isLoading, isError, refetch } = useQuestions();
+  const allQuestions = data?.items ?? [];
   const [stage, setStage] = React.useState<QuizStage>({ step: "config" });
 
   function handleStart(config: QuizConfig) {
-    const questions = selectQuestions(config);
+    const questions = selectQuestions(allQuestions, config);
     if (questions.length === 0) {
       toast.error("No questions match that configuration. Try a different topic or company.");
       return;
@@ -52,7 +56,20 @@ export function QuizPage() {
         </p>
       </div>
 
-      {stage.step === "config" && <QuizConfigForm onStart={handleStart} />}
+      {stage.step === "config" &&
+        (isLoading ? (
+          <Skeleton className="h-72 w-full rounded-xl" />
+        ) : isError ? (
+          <ErrorState description="We couldn't load the question bank." onRetry={() => refetch()} />
+        ) : allQuestions.length === 0 ? (
+          <EmptyState
+            icon={Sparkles}
+            title="No questions to practice yet"
+            description="Upload a placement PDF in the PDF Library — extracted questions will show up here automatically."
+          />
+        ) : (
+          <QuizConfigForm onStart={handleStart} />
+        ))}
 
       {stage.step === "active" &&
         (stage.questions.length === 0 ? (

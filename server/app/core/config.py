@@ -81,7 +81,14 @@ class Settings(BaseSettings):
     # --- AI provider (Step 2/3) ---
     AI_PROVIDER: Literal["gemini"] = "gemini"
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    # FIX: was "gemini-2.0-flash". Google deprecated the 2.0 Flash family in
+    # 2026 (retirement dates have been reported anywhere from March to June
+    # 2026 depending on source — it is gone either way as of this pass).
+    # "gemini-2.5-flash" is the current free-tier-eligible, general-purpose
+    # default; see the Gemini setup notes in PROJECT_STATE.md for the
+    # up-to-date model/quota picture, since Google revises both without
+    # much notice.
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     @property
     def is_ai_configured(self) -> bool:

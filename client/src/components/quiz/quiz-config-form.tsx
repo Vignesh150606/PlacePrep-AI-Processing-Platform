@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockCompanies } from "@/mocks/companies";
-import { mockQuestions } from "@/mocks/questions";
+import { useCompanies } from "@/hooks/use-companies";
+import { useQuestions } from "@/hooks/use-questions";
 
 const quizConfigSchema = z.object({
   mode: z.enum(["topic", "company", "mixed", "random"]),
@@ -22,12 +22,19 @@ interface QuizConfigFormProps {
   onStart: (config: QuizConfig) => void;
 }
 
-const topics = Array.from(new Set(mockQuestions.map((q) => q.topic))).sort();
-// FIX (minor): the schema allows up to 20 questions, but the UI previously
-// only offered 3/5/10 — nobody could actually reach the schema's own max.
+// The question-count picker offers up to 20 to match the schema's own max —
+// previously it only went up to 10, so nobody could actually reach 20.
 const QUESTION_COUNT_OPTIONS = [3, 5, 10, 20] as const;
 
 export function QuizConfigForm({ onStart }: QuizConfigFormProps) {
+  const { data: companyData } = useCompanies();
+  const { data: questionData } = useQuestions();
+
+  const companies = companyData?.items ?? [];
+  const topics = Array.from(
+    new Set((questionData?.items ?? []).map((q) => q.topic).filter((t) => t.length > 0)),
+  ).sort();
+
   const { control, handleSubmit, watch } = useForm<QuizConfig>({
     resolver: zodResolver(quizConfigSchema),
     defaultValues: { mode: "mixed", questionCount: 5 },
@@ -98,7 +105,7 @@ export function QuizConfigForm({ onStart }: QuizConfigFormProps) {
                     className="h-9 rounded-lg border border-border bg-surface-raised px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <option value="">Select a company</option>
-                    {mockCompanies.map((company) => (
+                    {companies.map((company) => (
                       <option key={company.id} value={company.id}>
                         {company.name}
                       </option>
