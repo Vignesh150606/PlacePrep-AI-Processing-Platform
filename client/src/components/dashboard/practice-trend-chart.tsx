@@ -46,7 +46,13 @@ export function PracticeTrendChart() {
                   fontSize: 12,
                 }}
               />
-              <Line type="monotone" dataKey="score" stroke="#6e56cf" strokeWidth={2} dot={{ r: 3 }} />
+              <Line
+                type="monotone"
+                dataKey="score"
+                stroke="var(--color-accent-600)"
+                strokeWidth={2}
+                dot={{ r: 3 }}
+              />
             </LineChart>
           </ResponsiveContainer>
         )}

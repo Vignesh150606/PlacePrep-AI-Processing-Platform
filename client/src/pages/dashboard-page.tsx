@@ -17,10 +17,10 @@ import { useWrongAnswers } from "@/hooks/use-wrong-answers";
 export function DashboardPage() {
   const { user } = useAuth();
   const firstName = user?.fullName.split(" ")[0] ?? "there";
-  const { data: questionData } = useQuestions();
-  const { data: pdfData } = usePdfs();
-  const { data: bookmarkData } = useBookmarksList();
-  const { data: attemptData } = useQuizAttempts();
+  const { data: questionData, isLoading: questionsLoading } = useQuestions();
+  const { data: pdfData, isLoading: pdfsLoading } = usePdfs();
+  const { data: bookmarkData, isLoading: bookmarksLoading } = useBookmarksList();
+  const { data: attemptData, isLoading: attemptsLoading } = useQuizAttempts();
   const { data: wrongAnswerData } = useWrongAnswers();
 
   const questionCount = questionData?.total ?? 0;
@@ -49,10 +49,25 @@ export function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="PDFs uploaded" value={pdfCount} icon={FileStack} />
-        <StatCard label="Questions in bank" value={questionCount} icon={BookOpenText} />
-        <StatCard label="Quizzes completed" value={quizzesCompleted} icon={ClipboardList} />
-        <StatCard label="Bookmarked questions" value={bookmarkedCount} icon={Bookmark} />
+        <StatCard label="PDFs uploaded" value={pdfCount} icon={FileStack} isLoading={pdfsLoading} />
+        <StatCard
+          label="Questions in bank"
+          value={questionCount}
+          icon={BookOpenText}
+          isLoading={questionsLoading}
+        />
+        <StatCard
+          label="Quizzes completed"
+          value={quizzesCompleted}
+          icon={ClipboardList}
+          isLoading={attemptsLoading}
+        />
+        <StatCard
+          label="Bookmarked questions"
+          value={bookmarkedCount}
+          icon={Bookmark}
+          isLoading={bookmarksLoading}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

@@ -2,6 +2,7 @@ import * as React from "react";
 import { GraduationCap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 
 function GoogleLogo() {
@@ -43,7 +44,7 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background p-6">
-      <div className="flex w-full max-w-sm flex-col gap-6">
+      <div className="flex w-full max-w-sm flex-col gap-6 animate-fade-up">
         <div className="flex flex-col items-center gap-2 text-center">
           <div className="flex size-10 items-center justify-center rounded-lg bg-accent-600 text-white">
             <GraduationCap className="size-5" />
@@ -56,19 +57,22 @@ export function LoginPage() {
 
         <Card>
           <CardContent className="flex flex-col gap-4 p-6">
-            <button
+            {/* FIX (consistency, UI audit): this was a hand-rolled <button>
+                with its own one-off height (h-10, matching none of the
+                Button component's sm/md/lg scale) and duplicated
+                disabled-state styling, instead of the shared design-system
+                Button used everywhere else in the app. */}
+            <Button
               type="button"
+              variant="outline"
+              size="lg"
               onClick={handleGoogleSignIn}
               disabled={isSigningIn}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised text-sm font-medium text-foreground transition-colors hover:bg-surface disabled:pointer-events-none disabled:opacity-50"
+              className="bg-surface-raised"
             >
-              {isSigningIn ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <GoogleLogo />
-              )}
+              {isSigningIn ? <Loader2 className="size-4 animate-spin" /> : <GoogleLogo />}
               Continue with Google
-            </button>
+            </Button>
             <p className="text-center text-xs text-muted-foreground">
               By continuing, you agree to use PlacePrep for placement preparation purposes.
             </p>

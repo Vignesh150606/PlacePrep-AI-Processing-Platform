@@ -147,7 +147,7 @@ export function AnalyticsPage() {
                         fontSize: 12,
                       }}
                     />
-                    <Bar dataKey="accuracy" fill="#6e56cf" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="accuracy" fill="var(--color-accent-600)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

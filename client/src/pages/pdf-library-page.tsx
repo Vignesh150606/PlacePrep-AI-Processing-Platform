@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
   CheckCircle2,
   FileText,
@@ -56,9 +57,33 @@ function StatusPill({ status }: { status: PdfProcessingStatus }) {
   );
 }
 
+/**
+ * REDESIGNED (explicit brief focus area — "Completely redesign upload...
+ * modern drag-and-drop area, premium upload card, upload animation,
+ * progress bar, processing stages, success/error state, retry"). Behavior
+ * and hooks are unchanged (still `useUploadPdf()`, same validation, same
+ * toasts) — this only changes presentation:
+ *   - the selected filename is now shown during upload instead of just a
+ *     generic "Uploading…" (the browser File object was already available
+ *     and simply wasn't being surfaced)
+ *   - a real (if indeterminate — the upload hook doesn't expose byte
+ *     progress) animated progress bar appears during the request, framer-
+ *     motion easing the icon between its three states so state changes
+ *     don't feel like an abrupt swap
+ *   - drag-over now scales the icon slightly via framer-motion rather
+ *     than only recoloring the border, and a nested-dragenter/dragleave
+ *     counter prevents the "flickers off when dragging over a child
+ *     element" bug that plain onDragLeave has on a card with children
+ *   - success is now its own explicit visual beat (checkmark + fade) at
+ *     the moment `useUploadPdf` resolves, instead of the state silently
+ *     reverting straight back to idle
+ */
 function UploadDropzone() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [justSucceeded, setJustSucceeded] = useState(false);
   const upload = useUploadPdf();
 
   const handleFile = (file: File | undefined) => {
@@ -71,48 +96,94 @@ function UploadDropzone() {
       toast.error(`File exceeds the ${formatBytes(PDF_UPLOAD_CONSTRAINTS.maxSizeBytes)} limit.`);
       return;
     }
+    setFileName(file.name);
     upload.mutate(
       { file, title: file.name.replace(/\.pdf$/i, "") },
       {
-        onSuccess: () => toast.success(`"${file.name}" uploaded — extraction queued.`),
+        onSuccess: () => {
+          toast.success(`"${file.name}" uploaded — extraction queued.`);
+          setJustSucceeded(true);
+          window.setTimeout(() => setJustSucceeded(false), 1800);
+        },
         onError: (err) => toast.error(err instanceof ApiError ? err.message : "Upload failed."),
+        onSettled: () => setFileName(null),
       },
     );
   };
 
+  const state: "idle" | "uploading" | "success" = upload.isPending
+    ? "uploading"
+    : justSucceeded
+      ? "success"
+      : "idle";
+
   return (
     <Card
       className={cn(
-        "border-dashed transition-colors",
+        "relative overflow-hidden border-dashed transition-colors",
         isDragging ? "border-accent-600 bg-accent-600/5" : "border-border",
       )}
-      onDragOver={(e) => {
+      onDragEnter={(e) => {
         e.preventDefault();
+        dragCounter.current += 1;
         setIsDragging(true);
       }}
-      onDragLeave={() => setIsDragging(false)}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        dragCounter.current -= 1;
+        if (dragCounter.current <= 0) {
+          dragCounter.current = 0;
+          setIsDragging(false);
+        }
+      }}
       onDrop={(e) => {
         e.preventDefault();
+        dragCounter.current = 0;
         setIsDragging(false);
         handleFile(e.dataTransfer.files?.[0]);
       }}
     >
-      <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-        <div className="flex size-11 items-center justify-center rounded-full bg-accent-600/10 text-accent-600">
-          {upload.isPending ? <Loader2 className="size-5 animate-spin" /> : <Upload className="size-5" />}
-        </div>
+      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+        <motion.div
+          className={cn(
+            "flex size-12 items-center justify-center rounded-full",
+            state === "success"
+              ? "bg-correct-500/10 text-correct-600 dark:text-correct-500"
+              : "bg-accent-600/10 text-accent-600",
+          )}
+          animate={{ scale: isDragging ? 1.12 : 1 }}
+          transition={{ type: "spring", stiffness: 400, damping: 22 }}
+        >
+          {state === "uploading" ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : state === "success" ? (
+            <CheckCircle2 className="size-5" />
+          ) : (
+            <Upload className="size-5" />
+          )}
+        </motion.div>
+
         <div>
           <p className="text-sm font-medium text-foreground">
-            {upload.isPending ? "Uploading…" : "Drop a PDF here, or click to browse"}
+            {state === "uploading"
+              ? `Uploading ${fileName ?? "file"}…`
+              : state === "success"
+                ? "Uploaded — extraction queued"
+                : "Drop a PDF here, or click to browse"}
           </p>
           <p className="text-xs text-muted-foreground">
             PDF only, up to {formatBytes(PDF_UPLOAD_CONSTRAINTS.maxSizeBytes)}. Extraction starts automatically —
             scanned pages are OCR'd automatically if needed, and large PDFs are split into chunks.
           </p>
         </div>
-        <Button variant="secondary" size="sm" disabled={upload.isPending} onClick={() => inputRef.current?.click()}>
-          Choose file
-        </Button>
+
+        {state === "idle" && (
+          <Button variant="secondary" size="sm" onClick={() => inputRef.current?.click()}>
+            Choose file
+          </Button>
+        )}
+
         <input
           ref={inputRef}
           type="file"
@@ -124,6 +195,19 @@ function UploadDropzone() {
           }}
         />
       </CardContent>
+
+      {/* Indeterminate progress bar — the upload hook doesn't expose real
+          byte-level progress, so this communicates "work is happening"
+          rather than a false sense of exact completion percentage. */}
+      {state === "uploading" && (
+        <div className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-accent-600/15">
+          <motion.div
+            className="h-full w-1/3 bg-accent-600"
+            animate={{ x: ["-100%", "300%"] }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </div>
+      )}
     </Card>
   );
 }

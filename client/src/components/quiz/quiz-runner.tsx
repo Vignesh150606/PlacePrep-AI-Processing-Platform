@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Flag, ChevronLeft, ChevronRight, RotateCcw, Timer as TimerIcon } from "lucide-react";
+import { Flag, ChevronLeft, ChevronRight, RotateCcw, Timer as TimerIcon, Keyboard } from "lucide-react";
 import type { Question, QuestionResponse } from "@placeprep/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -143,6 +143,60 @@ export function QuizRunner({ questions, timeLimitMinutes, startedAt, onComplete 
     goTo(currentIndex + 1);
   }
 
+  // ADDED (explicit brief requirement — "Keyboard shortcuts" under Quiz
+  // Experience — previously absent entirely). 1-9 / A-D select an option,
+  // Left/Right move between questions, M toggles Mark for Review, Enter
+  // submits on the last question. Ignored while a text input/textarea is
+  // focused (none currently exist on this page, but this keeps the
+  // handler safe if one is ever added) and while a modifier key is held,
+  // so it never shadows browser/OS shortcuts.
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey || !question) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
+      if (e.key >= "1" && e.key <= "9") {
+        const option = question.options[Number(e.key) - 1];
+        if (option) {
+          e.preventDefault();
+          selectOption(option.id);
+        }
+        return;
+      }
+      if (/^[a-dA-D]$/.test(e.key)) {
+        const option = question.options[e.key.toUpperCase().charCodeAt(0) - 65];
+        if (option) {
+          e.preventDefault();
+          selectOption(option.id);
+        }
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (isLast) submit();
+        else goTo(currentIndex + 1);
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goTo(currentIndex - 1);
+        return;
+      }
+      if (e.key.toLowerCase() === "m") {
+        e.preventDefault();
+        toggleMarkForReview();
+        return;
+      }
+      if (e.key === "Enter" && isLast) {
+        e.preventDefault();
+        submit();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  });
+
   if (!question) return null;
 
   const currentState = states[question.id];
@@ -245,6 +299,17 @@ export function QuizRunner({ questions, timeLimitMinutes, startedAt, onComplete 
       <Card className="h-fit">
         <CardContent className="flex flex-col gap-3 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Question palette</p>
+          <div
+            className="flex items-start gap-1.5 rounded-lg bg-surface px-2.5 py-2 text-[11px] leading-snug text-muted-foreground"
+            title="Keyboard shortcuts: number or letter keys select an option, Left/Right arrows move between questions, M marks for review, Enter submits on the last question."
+          >
+            <Keyboard className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              <kbd className="rounded border border-border-subtle px-1 font-sans">1–4</kbd> select ·{" "}
+              <kbd className="rounded border border-border-subtle px-1 font-sans">←→</kbd> navigate ·{" "}
+              <kbd className="rounded border border-border-subtle px-1 font-sans">M</kbd> mark
+            </span>
+          </div>
           <div className="grid grid-cols-5 gap-1.5">
             {questions.map((q, i) => (
               <button

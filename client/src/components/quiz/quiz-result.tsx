@@ -21,7 +21,7 @@ export function QuizResult({ questions, responses, timeTakenSeconds, onRetry }: 
 
   return (
     <div className="flex flex-col gap-5">
-      <Card>
+      <Card className="animate-fade-up">
         <CardContent className="flex flex-col items-center gap-2 p-8 text-center">
           <p className="text-sm font-medium text-muted-foreground">Your score</p>
           <p className="text-4xl font-semibold tabular-nums text-foreground">{formatPercent(score)}</p>
