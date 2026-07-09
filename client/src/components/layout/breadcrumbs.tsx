@@ -10,9 +10,12 @@ const LABEL_OVERRIDES: Record<string, string> = {
   community: "Community",
   calendar: "Calendar",
   bookmarks: "Bookmarks",
-  "wrong-answers": "Wrong Answers",
+  "wrong-answers": "Wrong Answer Notebook",
+  analytics: "Analytics",
   notifications: "Notifications",
   settings: "Settings",
+  admin: "Admin",
+  review: "Review Queue",
 };
 
 function humanize(segment: string): string {

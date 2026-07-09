@@ -17,6 +17,28 @@ copy .env.example .env   # Windows
 # cp .env.example .env   # macOS/Linux
 ```
 
+### OCR fallback — extra system packages (Sprint 4)
+
+Scanned/image-only PDFs are now handled automatically via an OCR fallback
+(`app/services/ocr.py`), but `pip install` alone is **not** enough for it to
+work — `pytesseract` and `pdf2image` are thin wrappers around two system
+binaries pip cannot install:
+
+```bash
+# Debian/Ubuntu (e.g. Render's build image)
+apt-get update && apt-get install -y tesseract-ocr poppler-utils
+
+# macOS (Homebrew)
+brew install tesseract poppler
+```
+
+If these aren't present, OCR is simply skipped (`OCR_ENABLED=true` in
+`.env` but `app/services/ocr.is_available()` returns `False`) — scanned PDFs
+will fail extraction with the same "no selectable text" error as before this
+pass, rather than crashing the server. Check `GET /api/v1/health` —
+`ocr_configured` reflects the `OCR_ENABLED` setting (not the same as OCR
+being actually *usable*; that's only checked lazily on first use).
+
 ## Run
 
 ```bash
@@ -41,6 +63,8 @@ double check these on every deployed environment, not just locally:
 2. **`SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY`** —
    from your Supabase project's API settings (current publishable/secret
    key system, not the deprecated anon/service_role naming).
+3. **`tesseract-ocr` / `poppler-utils`** (see above) if you want the OCR
+   fallback to actually run on the deployed instance, not just locally.
 
 Also make sure your Supabase project's **Authentication → URL Configuration**
 (Site URL + Redirect URLs) and your Google Cloud OAuth client's **Authorized
@@ -63,25 +87,32 @@ server/
       security.py          # Supabase JWT verification
       supabase_client.py   # Service-role Supabase client
     api/
-      deps.py              # get_current_user / require_admin
+      deps.py              # get_current_user / is_admin / require_admin
       v1/
         router.py           # Aggregates all v1 routes
         endpoints/
           health.py
           profiles.py
           pdfs.py
+          questions.py       # + Module 8 admin review (approve/reject/edit/delete)
+          companies.py
           processing.py
           notifications.py
+          quizzes.py         # NEW — quiz attempts + Wrong Answer Notebook
+          bookmarks.py       # NEW — Module 5
     services/
       pipeline.py           # Queued -> Processing -> Extraction -> ... -> Notification
-      pdf_text.py           # pypdf-based text extraction
+      pdf_text.py           # pypdf-based text extraction + per-page quality signal
+      ocr.py                # NEW — scanned-PDF OCR fallback (Sprint 4 fix #3)
+      chunking.py           # NEW — large-PDF chunk splitting (Sprint 4 fix #4)
+      answer_key.py         # NEW — separates a trailing "Answer Key" section pre-chunking
       duplicate.py          # exact hash + rapidfuzz fuzzy match
       classification.py     # subject/topic/company upsert + confidence gating
       notifications.py      # thin insert wrapper
       ai/
         base.py              # AIProvider interface
         service.py            # AIService — pipeline's single entry point
-        gemini_provider.py    # Gemini implementation
+        gemini_provider.py    # Gemini implementation — redesigned prompt (Sprint 4 fix #2)
   requirements.txt
   .env.example
 ```

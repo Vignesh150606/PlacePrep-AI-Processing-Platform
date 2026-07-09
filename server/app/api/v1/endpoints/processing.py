@@ -25,6 +25,7 @@ class DashboardStats(CamelModel):
     pending_review_count: int
     approved_count: int
     average_confidence: Optional[float]
+    ocr_jobs_total: int
 
 
 class ProcessingJobResponse(CamelModel):
@@ -37,6 +38,8 @@ class ProcessingJobResponse(CamelModel):
     questions_extracted: int
     duplicates_found: int
     low_confidence_count: int
+    ocr_used: bool
+    chunk_count: int
     error_message: Optional[str]
     started_at: Optional[str]
     completed_at: Optional[str]
@@ -63,13 +66,14 @@ async def get_dashboard(_admin: CurrentUser = Depends(require_admin)):
 
     completed_jobs = (
         admin.table("processing_jobs")
-        .select("questions_extracted, duplicates_found")
+        .select("questions_extracted, duplicates_found, ocr_used")
         .eq("status", "completed")
         .limit(1000)
         .execute()
     )
     questions_total = sum(row["questions_extracted"] for row in completed_jobs.data or [])
     duplicates_total = sum(row["duplicates_found"] for row in completed_jobs.data or [])
+    ocr_jobs_total = sum(1 for row in completed_jobs.data or [] if row.get("ocr_used"))
 
     pending = (
         admin.table("questions").select("id", count="exact").eq("status", "pending-review").execute()
@@ -96,6 +100,7 @@ async def get_dashboard(_admin: CurrentUser = Depends(require_admin)):
         pending_review_count=pending.count or 0,
         approved_count=approved.count or 0,
         average_confidence=avg_confidence,
+        ocr_jobs_total=ocr_jobs_total,
     )
     return ok(data=stats, message="Dashboard stats fetched.")
 
@@ -112,6 +117,14 @@ async def list_jobs(_admin: CurrentUser = Depends(require_admin)):
         pdf_names = {p["id"]: p["file_name"] for p in pdfs}
 
     items = [
-        ProcessingJobResponse(**{**j, "pdf_file_name": pdf_names.get(j["pdf_resource_id"])}) for j in jobs
+        ProcessingJobResponse(
+            **{
+                **j,
+                "pdf_file_name": pdf_names.get(j["pdf_resource_id"]),
+                "ocr_used": j.get("ocr_used", False),
+                "chunk_count": j.get("chunk_count", 1),
+            }
+        )
+        for j in jobs
     ]
     return ok(data=ProcessingJobListResponse(items=items), message="Jobs fetched.")

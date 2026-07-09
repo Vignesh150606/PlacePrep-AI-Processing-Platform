@@ -1,4 +1,4 @@
-import { Bookmark } from "lucide-react";
+import { Bookmark, FileText } from "lucide-react";
 import type { Question } from "@placeprep/shared";
 import { Card } from "@/components/ui/card";
 import { Badge, DifficultyBadge } from "@/components/ui/badge";
@@ -15,11 +15,19 @@ interface QuestionCardProps {
    * and never matched the old mock ids anyway.
    */
   companyName?: string | null;
+  /** Resolved source PDF file name, if this question was extracted from one. */
+  sourcePdfName?: string | null;
   isBookmarked?: boolean;
   onToggleBookmark?: (questionId: string) => void;
 }
 
-export function QuestionCard({ question, companyName, isBookmarked, onToggleBookmark }: QuestionCardProps) {
+export function QuestionCard({
+  question,
+  companyName,
+  sourcePdfName,
+  isBookmarked,
+  onToggleBookmark,
+}: QuestionCardProps) {
   const accuracy =
     question.timesAttempted > 0 ? (question.timesCorrect / question.timesAttempted) * 100 : null;
 
@@ -65,11 +73,20 @@ export function QuestionCard({ question, companyName, isBookmarked, onToggleBook
         ))}
       </ul>
 
-      {accuracy !== null && (
-        <p className="text-xs text-muted-foreground">
-          {formatPercent(accuracy)} of students answer this correctly · {question.timesAttempted} attempts
-        </p>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          {accuracy !== null
+            ? `${formatPercent(accuracy)} of students answer this correctly · ${question.timesAttempted} attempts`
+            : "Not attempted yet"}
+        </span>
+        {sourcePdfName && (
+          <span className="flex items-center gap-1" title={sourcePdfName}>
+            <FileText className="size-3.5" />
+            <span className="max-w-40 truncate">{sourcePdfName}</span>
+            {question.pageNumber && <span>· p.{question.pageNumber}</span>}
+          </span>
+        )}
+      </div>
     </Card>
   );
 }

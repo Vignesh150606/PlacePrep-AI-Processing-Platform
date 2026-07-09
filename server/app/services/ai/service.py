@@ -13,12 +13,24 @@ class AIService:
         self._provider = provider
 
     async def extract_questions(
-        self, *, document_text: str, source_hint: Optional[str] = None
+        self,
+        *,
+        document_text: str,
+        source_hint: Optional[str] = None,
+        chunk_index: int = 0,
+        chunk_total: int = 1,
+        page_offset_hint: Optional[str] = None,
+        answer_key_text: Optional[str] = None,
     ) -> AIExtractionResult:
         if not document_text.strip():
-            raise AIProviderError("No extractable text found in this PDF.")
+            raise AIProviderError("No extractable text found in this PDF portion.")
         return await self._provider.extract_questions(
-            document_text=document_text, source_hint=source_hint
+            document_text=document_text,
+            source_hint=source_hint,
+            chunk_index=chunk_index,
+            chunk_total=chunk_total,
+            page_offset_hint=page_offset_hint,
+            answer_key_text=answer_key_text,
         )
 
 

@@ -61,6 +61,15 @@ export async function apiPatch<T>(path: string, json: unknown): Promise<T> {
   return handleResponse<T>(res);
 }
 
+export async function apiDelete<T>(path: string): Promise<T> {
+  const headers = await authHeader();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "DELETE",
+    headers,
+  });
+  return handleResponse<T>(res);
+}
+
 /** Multipart upload — no Content-Type header, the browser sets the boundary. */
 export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
   const headers = await authHeader();

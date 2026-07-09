@@ -9,7 +9,8 @@ export type ActivityLogAction =
   | "pdf-deleted"
   | "bookmark-added"
   | "bookmark-removed"
-  | "calendar-event-created";
+  | "calendar-event-created"
+  | "quiz-completed";
 
 export interface ActivityLog {
   id: UUID;

@@ -1,19 +1,42 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, History, Sparkles } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuestions } from "@/hooks/use-questions";
+import { useInProgressAttempt } from "@/hooks/use-quiz-attempts";
 
-/**
- * FIX: this used to render mocks/quizzes.ts as if the user had a real
- * in-progress quiz ("Resume quiz — Amazon SDE-1"). There's no Quiz Attempt
- * backend yet (Sprint 5 — Quiz Engine / Learning Experience), so there is no
- * real quiz to resume. This is an honest CTA into real question-bank data
- * instead of a fabricated "continue where you left off" card.
- */
 export function ContinuePracticeCard() {
   const { data } = useQuestions();
+  const { data: inProgress } = useInProgressAttempt();
   const count = data?.total ?? 0;
+
+  if (inProgress) {
+    return (
+      <Card className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-warning-500/10 via-transparent to-transparent" />
+        <CardContent className="relative flex flex-col gap-4 p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Practice</p>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-warning-500/15 text-warning-500">
+              <History className="size-4" />
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Resume your quiz</p>
+            <p className="text-sm text-muted-foreground">
+              {inProgress.questionIds.length} question{inProgress.questionIds.length === 1 ? "" : "s"} left in progress
+            </p>
+          </div>
+          <Button asChild size="sm" className="w-fit">
+            <Link to="/quiz">
+              Resume quiz
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="relative overflow-hidden">

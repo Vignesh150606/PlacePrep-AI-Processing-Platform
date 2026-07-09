@@ -22,6 +22,7 @@ class ExtractedQuestion(BaseModel):
     subject: Optional[str] = None
     difficulty: str = Field(default="medium", description="easy | medium | hard")
     company: Optional[str] = None
+    page_number: Optional[int] = Field(default=None, description="1-indexed page in the source PDF, if determinable")
     tags: List[str] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
@@ -42,6 +43,26 @@ class AIProvider(ABC):
 
     @abstractmethod
     async def extract_questions(
-        self, *, document_text: str, source_hint: Optional[str] = None
+        self,
+        *,
+        document_text: str,
+        source_hint: Optional[str] = None,
+        chunk_index: int = 0,
+        chunk_total: int = 1,
+        page_offset_hint: Optional[str] = None,
+        answer_key_text: Optional[str] = None,
     ) -> AIExtractionResult:
+        """
+        chunk_index/chunk_total: which piece of a larger, chunked document
+        this call covers (Sprint 4 fix #4) — 0/1 for an unchunked document.
+        page_offset_hint: free-text hint about which pages this chunk roughly
+        covers (e.g. "pages 4-9 of 12"), passed through to the prompt so the
+        model's page_number guesses stay plausible even though it only sees
+        one chunk's worth of text at a time.
+        answer_key_text: raw text of a separately-listed "Answer Key" section
+        detected by services/answer_key.py, if any — attached to every chunk's
+        prompt (not just the chunk the key physically appeared in) so the
+        model can correctly associate each question with its answer even
+        when the key section landed in a different chunk (Sprint 4 fix).
+        """
         raise NotImplementedError

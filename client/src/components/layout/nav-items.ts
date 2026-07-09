@@ -11,6 +11,8 @@ import {
   XCircle,
   Bell,
   Settings,
+  BarChart3,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -18,6 +20,8 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** Hidden from the nav for non-admins (checked via useIsAdmin()). */
+  adminOnly?: boolean;
 }
 
 export interface NavSection {
@@ -52,8 +56,13 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Bookmarks", href: "/bookmarks", icon: Bookmark },
       { label: "Wrong Answers", href: "/wrong-answers", icon: XCircle },
+      { label: "Analytics", href: "/analytics", icon: BarChart3 },
       { label: "Notifications", href: "/notifications", icon: Bell },
     ],
+  },
+  {
+    label: "Admin",
+    items: [{ label: "Review Queue", href: "/admin/review", icon: ShieldCheck, adminOnly: true }],
   },
   {
     label: "Account",

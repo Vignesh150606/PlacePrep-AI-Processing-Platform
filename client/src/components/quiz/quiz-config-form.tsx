@@ -8,12 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCompanies } from "@/hooks/use-companies";
 import { useQuestions } from "@/hooks/use-questions";
+import { useWrongAnswers } from "@/hooks/use-wrong-answers";
+import { useBookmarksList } from "@/hooks/use-bookmarks";
 
 const quizConfigSchema = z.object({
-  mode: z.enum(["topic", "company", "mixed", "random"]),
+  mode: z.enum(["topic", "company", "mixed", "random", "wrong-answers", "bookmarks"]),
   topic: z.string().optional(),
   companyId: z.string().optional(),
   questionCount: z.number().min(3).max(20),
+  timeLimitMinutes: z.number().nullable(),
 });
 
 export type QuizConfig = z.infer<typeof quizConfigSchema>;
@@ -25,19 +28,30 @@ interface QuizConfigFormProps {
 // The question-count picker offers up to 20 to match the schema's own max —
 // previously it only went up to 10, so nobody could actually reach 20.
 const QUESTION_COUNT_OPTIONS = [3, 5, 10, 20] as const;
+const TIME_LIMIT_OPTIONS: { label: string; value: number | null }[] = [
+  { label: "No limit", value: null },
+  { label: "5 min", value: 5 },
+  { label: "10 min", value: 10 },
+  { label: "20 min", value: 20 },
+];
 
 export function QuizConfigForm({ onStart }: QuizConfigFormProps) {
   const { data: companyData } = useCompanies();
   const { data: questionData } = useQuestions();
+  const { data: wrongAnswerData } = useWrongAnswers();
+  const { data: bookmarkData } = useBookmarksList();
 
   const companies = companyData?.items ?? [];
   const topics = Array.from(
     new Set((questionData?.items ?? []).map((q) => q.topic).filter((t) => t.length > 0)),
   ).sort();
 
+  const wrongAnswerCount = (wrongAnswerData?.items ?? []).filter((w) => !w.resolved).length;
+  const bookmarkedQuestionCount = (bookmarkData?.items ?? []).filter((b) => b.targetType === "question").length;
+
   const { control, handleSubmit, watch } = useForm<QuizConfig>({
     resolver: zodResolver(quizConfigSchema),
-    defaultValues: { mode: "mixed", questionCount: 5 },
+    defaultValues: { mode: "mixed", questionCount: 5, timeLimitMinutes: null },
   });
 
   const mode = watch("mode");
@@ -57,15 +71,31 @@ export function QuizConfigForm({ onStart }: QuizConfigFormProps) {
               name="mode"
               render={({ field }) => (
                 <Tabs value={field.value} onValueChange={field.onChange}>
-                  <TabsList>
+                  <TabsList className="flex-wrap h-auto">
                     <TabsTrigger value="topic">Topic-wise</TabsTrigger>
                     <TabsTrigger value="company">Company-wise</TabsTrigger>
                     <TabsTrigger value="mixed">Mixed</TabsTrigger>
                     <TabsTrigger value="random">Random</TabsTrigger>
+                    <TabsTrigger value="wrong-answers" disabled={wrongAnswerCount === 0}>
+                      Wrong Answers {wrongAnswerCount > 0 ? `(${wrongAnswerCount})` : ""}
+                    </TabsTrigger>
+                    <TabsTrigger value="bookmarks" disabled={bookmarkedQuestionCount === 0}>
+                      Bookmarks {bookmarkedQuestionCount > 0 ? `(${bookmarkedQuestionCount})` : ""}
+                    </TabsTrigger>
                   </TabsList>
                 </Tabs>
               )}
             />
+            {mode === "wrong-answers" && wrongAnswerCount === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No unresolved wrong answers yet — they'll show up here after you get a question wrong.
+              </p>
+            )}
+            {mode === "bookmarks" && bookmarkedQuestionCount === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No bookmarked questions yet — bookmark some from the Question Bank first.
+              </p>
+            )}
           </div>
 
           {mode === "topic" && (
@@ -135,6 +165,32 @@ export function QuizConfigForm({ onStart }: QuizConfigFormProps) {
                       }`}
                     >
                       {count}
+                    </button>
+                  ))}
+                </div>
+              )}
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Time limit</Label>
+            <Controller
+              control={control}
+              name="timeLimitMinutes"
+              render={({ field }) => (
+                <div className="flex gap-2">
+                  {TIME_LIMIT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => field.onChange(opt.value)}
+                      className={`h-9 flex-1 rounded-lg border text-sm font-medium transition-colors ${
+                        field.value === opt.value
+                          ? "border-accent-600 bg-accent-600/10 text-accent-700 dark:text-accent-400"
+                          : "border-border text-muted-foreground hover:bg-surface"
+                      }`}
+                    >
+                      {opt.label}
                     </button>
                   ))}
                 </div>

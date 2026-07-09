@@ -51,8 +51,9 @@ async def is_admin(current_user: CurrentUser = Depends(get_current_user)) -> boo
 
 async def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     """Gate for admin-only endpoints (processing dashboard, KEEP_PERMANENT
-    toggle). Fetches the profile role fresh rather than trusting a JWT claim,
-    since role changes should take effect immediately, not on next login."""
+    toggle, quiz/question review). Fetches the profile role fresh rather
+    than trusting a JWT claim, since role changes should take effect
+    immediately, not on next login."""
     from app.core.exceptions import ForbiddenError
 
     if await _fetch_role_id(current_user.id) != 3:

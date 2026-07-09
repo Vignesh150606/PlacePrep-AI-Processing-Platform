@@ -45,3 +45,13 @@ export function formatBytes(bytes: number): string {
   const gb = mb / 1024;
   return `${gb.toFixed(2)} GB`;
 }
+
+/** mm:ss (or hh:mm:ss once past an hour) — used by the quiz timer and result summary. */
+export function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const hrs = Math.floor(s / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return hrs > 0 ? `${hrs}:${pad(mins)}:${pad(secs)}` : `${mins}:${pad(secs)}`;
+}

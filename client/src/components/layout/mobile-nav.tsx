@@ -4,14 +4,21 @@ import { GraduationCap, Menu, X } from "lucide-react";
 import { NAV_SECTIONS } from "./nav-items";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useIsAdmin } from "@/hooks/use-profile";
 
 export function MobileNav() {
   const [open, setOpen] = React.useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isAdmin = useIsAdmin();
 
   React.useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !item.adminOnly || isAdmin),
+  })).filter((section) => section.items.length > 0);
 
   return (
     <div className="lg:hidden">
@@ -45,7 +52,7 @@ export function MobileNav() {
               </Button>
             </div>
             <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Mobile navigation">
-              {NAV_SECTIONS.map((section) => (
+              {visibleSections.map((section) => (
                 <div key={section.label} className="mb-5">
                   <p className="mb-1.5 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                     {section.label}

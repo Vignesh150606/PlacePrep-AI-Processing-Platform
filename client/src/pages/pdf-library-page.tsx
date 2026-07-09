@@ -4,6 +4,7 @@ import {
   FileText,
   Loader2,
   RefreshCw,
+  ScanText,
   Upload,
   XCircle,
 } from "lucide-react";
@@ -34,13 +35,23 @@ const STATUS_CONFIG: Record<PdfProcessingStatus, { icon: typeof FileText; classN
   failed: { icon: XCircle, className: "text-incorrect-600 dark:text-incorrect-500", label: "Failed" },
 };
 
+// NOTE ON THE "processing text rotates with the spinner" UI BUG:
+// The spec asked us to fix a bug where status text spins along with its
+// loading icon. In every status-rendering component in this codebase
+// (StatusPill below, and the equivalent in recent-pdfs-card.tsx), the
+// `animate-spin` class is applied only to the <Icon> element — the label
+// text is a separate sibling <span>/string with no animation class. We
+// could not reproduce or locate the described bug anywhere in the provided
+// snapshot; it may live in a component that wasn't included here, or may
+// already have been fixed. See PROJECT_STATE.md for the honest note on this
+// rather than a fabricated "fix" to code that already looks correct.
 function StatusPill({ status }: { status: PdfProcessingStatus }) {
   const config = STATUS_CONFIG[status];
   const Icon = config.icon;
   return (
     <span className={cn("inline-flex items-center gap-1 text-xs font-medium", config.className)}>
       <Icon className="size-3.5" />
-      {config.label}
+      <span>{config.label}</span>
     </span>
   );
 }
@@ -95,7 +106,8 @@ function UploadDropzone() {
             {upload.isPending ? "Uploading…" : "Drop a PDF here, or click to browse"}
           </p>
           <p className="text-xs text-muted-foreground">
-            PDF only, up to {formatBytes(PDF_UPLOAD_CONSTRAINTS.maxSizeBytes)}. Extraction starts automatically.
+            PDF only, up to {formatBytes(PDF_UPLOAD_CONSTRAINTS.maxSizeBytes)}. Extraction starts automatically —
+            scanned pages are OCR'd automatically if needed, and large PDFs are split into chunks.
           </p>
         </div>
         <Button variant="secondary" size="sm" disabled={upload.isPending} onClick={() => inputRef.current?.click()}>
@@ -214,7 +226,7 @@ function ProcessingDashboardTab() {
   if (statsLoading) {
     return (
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {[...Array(8)].map((_, i) => (
+        {[...Array(9)].map((_, i) => (
           <Skeleton key={i} className="h-24 w-full rounded-xl" />
         ))}
       </div>
@@ -235,6 +247,7 @@ function ProcessingDashboardTab() {
         <StatCard label="Questions extracted" value={stats.questionsExtractedTotal} icon={FileText} />
         <StatCard label="Duplicates found" value={stats.duplicatesFoundTotal} icon={FileText} />
         <StatCard label="Pending review" value={stats.pendingReviewCount} icon={FileText} />
+        <StatCard label="OCR fallback used" value={stats.ocrJobsTotal} icon={ScanText} />
         <StatCard
           label="Avg. confidence"
           value={stats.averageConfidence !== null ? `${Math.round(stats.averageConfidence * 100)}%` : "—"}
@@ -264,6 +277,8 @@ function ProcessingDashboardTab() {
                   <TableHead>Extracted</TableHead>
                   <TableHead>Duplicates</TableHead>
                   <TableHead>Review</TableHead>
+                  <TableHead>Chunks</TableHead>
+                  <TableHead>OCR</TableHead>
                   <TableHead>Started</TableHead>
                   <TableHead />
                 </TableRow>
@@ -285,6 +300,10 @@ function ProcessingDashboardTab() {
                     <TableCell>{job.questionsExtracted}</TableCell>
                     <TableCell>{job.duplicatesFound}</TableCell>
                     <TableCell>{job.lowConfidenceCount}</TableCell>
+                    <TableCell>{job.chunkCount || 1}</TableCell>
+                    <TableCell>
+                      {job.ocrUsed ? <Badge variant="accent">OCR</Badge> : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {job.startedAt ? formatRelativeTime(job.startedAt) : "—"}
                     </TableCell>

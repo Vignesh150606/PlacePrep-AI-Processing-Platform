@@ -1,10 +1,12 @@
-import { BookOpenText } from "lucide-react";
+import { BookOpenText, ChevronLeft, ChevronRight } from "lucide-react";
 import { useQuestions } from "@/hooks/use-questions";
 import { useCompanies } from "@/hooks/use-companies";
+import { usePdfs } from "@/hooks/use-pdfs";
 import { useQuestionFilters } from "@/hooks/use-question-filters";
 import { useBookmarks } from "@/hooks/use-bookmarks";
 import { QuestionFilters } from "@/components/questions/question-filters";
 import { QuestionCard } from "@/components/questions/question-card";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,8 +14,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function QuestionBankPage() {
   const { data, isLoading, isError, refetch } = useQuestions();
   const { data: companyData } = useCompanies();
+  const { data: pdfData } = usePdfs();
   const questions = data?.items ?? [];
   const companyNameById = new Map((companyData?.items ?? []).map((c) => [c.id, c.name]));
+  const pdfNameById = new Map((pdfData?.items ?? []).map((p) => [p.id, p.title || p.fileName]));
 
   const {
     search,
@@ -23,9 +27,24 @@ export function QuestionBankPage() {
     selectedSubjects,
     toggleSubject,
     availableSubjects,
+    selectedTopics,
+    toggleTopic,
+    availableTopics,
+    sortBy,
+    setSortBy,
+    sourcePdfId,
+    setSourcePdfId,
     filtered,
+    paginated,
+    page,
+    totalPages,
+    setPage,
   } = useQuestionFilters(questions);
   const { isBookmarked, toggle } = useBookmarks();
+
+  const sourcePdfOptions = Array.from(
+    new Set(questions.map((q) => q.sourcePdfId).filter((id): id is string => Boolean(id))),
+  ).map((id) => ({ id, label: pdfNameById.get(id) ?? "Unknown PDF" }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -62,6 +81,14 @@ export function QuestionBankPage() {
             selectedSubjects={selectedSubjects}
             onToggleSubject={toggleSubject}
             availableSubjects={availableSubjects}
+            selectedTopics={selectedTopics}
+            onToggleTopic={toggleTopic}
+            availableTopics={availableTopics}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            sourcePdfId={sourcePdfId}
+            onSourcePdfChange={setSourcePdfId}
+            sourcePdfOptions={sourcePdfOptions}
           />
 
           {filtered.length === 0 ? (
@@ -71,17 +98,46 @@ export function QuestionBankPage() {
               description="Try a different search term or clear a filter."
             />
           ) : (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {filtered.map((question) => (
-                <QuestionCard
-                  key={question.id}
-                  question={question}
-                  companyName={question.companyId ? companyNameById.get(question.companyId) : null}
-                  isBookmarked={isBookmarked(question.id)}
-                  onToggleBookmark={(id) => toggle(id, "question")}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {paginated.map((question) => (
+                  <QuestionCard
+                    key={question.id}
+                    question={question}
+                    companyName={question.companyId ? companyNameById.get(question.companyId) : null}
+                    sourcePdfName={question.sourcePdfId ? pdfNameById.get(question.sourcePdfId) : null}
+                    isBookmarked={isBookmarked(question.id)}
+                    onToggleBookmark={(id) => toggle(id, "question")}
+                  />
+                ))}
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    <ChevronLeft className="size-3.5" />
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Page {page} of {totalPages}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    Next
+                    <ChevronRight className="size-3.5" />
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

@@ -12,6 +12,8 @@ export interface ProcessingJob {
   questionsExtracted: number;
   duplicatesFound: number;
   lowConfidenceCount: number;
+  ocrUsed: boolean;
+  chunkCount: number;
   errorMessage: string | null;
   startedAt: ISODateString | null;
   completedAt: ISODateString | null;
@@ -28,4 +30,5 @@ export interface ProcessingDashboardStats {
   pendingReviewCount: number;
   approvedCount: number;
   averageConfidence: number | null;
+  ocrJobsTotal: number;
 }

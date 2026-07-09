@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Bookmark, BookOpenText, ClipboardList, FileStack, Upload } from "lucide-react";
+import { Bookmark, BookOpenText, ClipboardList, FileStack, Upload, XCircle } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { PracticeTrendChart } from "@/components/dashboard/practice-trend-chart";
@@ -10,31 +10,24 @@ import { RecentActivityCard } from "@/components/dashboard/recent-activity-card"
 import { useAuth } from "@/hooks/use-auth";
 import { useQuestions } from "@/hooks/use-questions";
 import { usePdfs } from "@/hooks/use-pdfs";
-import { useBookmarks } from "@/hooks/use-bookmarks";
+import { useBookmarksList } from "@/hooks/use-bookmarks";
+import { useQuizAttempts } from "@/hooks/use-quiz-attempts";
+import { useWrongAnswers } from "@/hooks/use-wrong-answers";
 
-/**
- * FIX (Part 3 of the Sprint 4 polish pass — "remove fake data"): every stat
- * on this page used to come from mocks/*.ts (fake quiz attempts, fake
- * bookmarks, a hardcoded "Today's challenge" block, a fake weekly trend
- * chart). Now:
- *  - "PDFs uploaded" / "Questions in bank" are real counts from the API.
- *  - "Bookmarked this session" is real (session-only — see use-bookmarks.ts).
- *  - "Quizzes completed" honestly shows "—": there's no Quiz Attempt
- *    backend yet (Sprint 5), so there's nothing real to report.
- *  - The old "Today's challenge" block named a specific fake topic/question
- *    count that was never actually assembled for the user; removed rather
- *    than replaced, since a real personalized recommendation needs the Quiz
- *    Engine's attempt history to mean anything.
- */
 export function DashboardPage() {
   const { user } = useAuth();
   const firstName = user?.fullName.split(" ")[0] ?? "there";
   const { data: questionData } = useQuestions();
   const { data: pdfData } = usePdfs();
-  const { bookmarkedCount } = useBookmarks();
+  const { data: bookmarkData } = useBookmarksList();
+  const { data: attemptData } = useQuizAttempts();
+  const { data: wrongAnswerData } = useWrongAnswers();
 
   const questionCount = questionData?.total ?? 0;
   const pdfCount = pdfData?.total ?? 0;
+  const bookmarkedCount = (bookmarkData?.items ?? []).length;
+  const quizzesCompleted = (attemptData?.items ?? []).filter((a) => a.status === "completed").length;
+  const wrongAnswerCount = (wrongAnswerData?.items ?? []).filter((w) => !w.resolved).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -58,8 +51,8 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="PDFs uploaded" value={pdfCount} icon={FileStack} />
         <StatCard label="Questions in bank" value={questionCount} icon={BookOpenText} />
-        <StatCard label="Bookmarked this session" value={bookmarkedCount} icon={Bookmark} />
-        <StatCard label="Quizzes completed" value="—" icon={ClipboardList} />
+        <StatCard label="Quizzes completed" value={quizzesCompleted} icon={ClipboardList} />
+        <StatCard label="Bookmarked questions" value={bookmarkedCount} icon={Bookmark} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -68,6 +61,19 @@ export function DashboardPage() {
         </div>
         <ContinuePracticeCard />
       </div>
+
+      {wrongAnswerCount > 0 && (
+        <Link
+          to="/wrong-answers"
+          className="flex items-center justify-between gap-3 rounded-xl border border-incorrect-500/30 bg-incorrect-500/5 px-4 py-3 text-sm transition-colors hover:bg-incorrect-500/10"
+        >
+          <span className="flex items-center gap-2 text-incorrect-600 dark:text-incorrect-500">
+            <XCircle className="size-4" />
+            {wrongAnswerCount} question{wrongAnswerCount === 1 ? "" : "s"} to review in your Wrong Answer Notebook
+          </span>
+          <span className="font-medium text-incorrect-600 dark:text-incorrect-500">Review now →</span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <UpcomingCompaniesCard />

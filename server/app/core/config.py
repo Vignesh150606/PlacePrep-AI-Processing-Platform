@@ -98,6 +98,29 @@ class Settings(BaseSettings):
     DUPLICATE_SIMILARITY_THRESHOLD: float = 0.87
     MAX_EXTRACTION_ATTEMPTS: int = 3
 
+    # --- Chunking (Sprint 4 fix #4 — large PDF support) ---
+    # A single Gemini call over a 60+ page paper both risks truncated JSON
+    # output and dilutes the model's attention across too much text at once
+    # (this was the leading suspect for "extracts zero questions" on longer
+    # PDFs — see services/chunking.py and services/pipeline.py). Chunk size
+    # is in characters of extracted text, not pages, since page density
+    # varies wildly between a slide-style OA PDF and a dense text paper.
+    CHUNK_MAX_CHARS: int = 12_000
+    CHUNK_OVERLAP_CHARS: int = 400
+
+    # --- OCR fallback (Sprint 4 fix #3 — scanned PDF support) ---
+    # Disabled unless a Tesseract binary is actually on PATH (checked lazily
+    # in services/ocr.py, not here — importing pytesseract/pdf2image here
+    # would make config.py fail to import on a machine that hasn't installed
+    # the system packages yet, which is a worse failure mode than "OCR is
+    # simply unavailable, degrade gracefully").
+    OCR_ENABLED: bool = True
+    # Extracted text under this many characters per page (averaged across the
+    # document) is treated as a signal the PDF is scanned/image-only rather
+    # than a genuinely short document, and triggers the OCR fallback path.
+    OCR_MIN_CHARS_PER_PAGE: int = 40
+    OCR_DPI: int = 200
+
 
 @lru_cache
 def get_settings() -> Settings:

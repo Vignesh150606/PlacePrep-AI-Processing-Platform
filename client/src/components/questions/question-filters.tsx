@@ -3,13 +3,15 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { SlidersHorizontal } from "lucide-react";
+import { ArrowUpDown, SlidersHorizontal } from "lucide-react";
 import type { DifficultyLevel } from "@placeprep/shared";
+import type { QuestionSortBy } from "@/hooks/use-question-filters";
 
 interface QuestionFiltersProps {
   search: string;
@@ -19,9 +21,24 @@ interface QuestionFiltersProps {
   selectedSubjects: string[];
   onToggleSubject: (subject: string) => void;
   availableSubjects: string[];
+  selectedTopics: string[];
+  onToggleTopic: (topic: string) => void;
+  availableTopics: string[];
+  sortBy: QuestionSortBy;
+  onSortChange: (sort: QuestionSortBy) => void;
+  sourcePdfId: string | null;
+  onSourcePdfChange: (id: string | null) => void;
+  sourcePdfOptions: { id: string; label: string }[];
 }
 
 const DIFFICULTIES: DifficultyLevel[] = ["easy", "medium", "hard"];
+
+const SORT_LABEL: Record<QuestionSortBy, string> = {
+  recent: "Recently added",
+  difficulty: "Difficulty (easy → hard)",
+  "most-attempted": "Most attempted",
+  accuracy: "Highest accuracy",
+};
 
 export function QuestionFilters({
   search,
@@ -31,8 +48,17 @@ export function QuestionFilters({
   selectedSubjects,
   onToggleSubject,
   availableSubjects,
+  selectedTopics,
+  onToggleTopic,
+  availableTopics,
+  sortBy,
+  onSortChange,
+  sourcePdfId,
+  onSourcePdfChange,
+  sourcePdfOptions,
 }: QuestionFiltersProps) {
-  const activeFilterCount = selectedDifficulties.length + selectedSubjects.length;
+  const activeFilterCount =
+    selectedDifficulties.length + selectedSubjects.length + selectedTopics.length + (sourcePdfId ? 1 : 0);
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -42,6 +68,23 @@ export function QuestionFilters({
         placeholder="Search questions by keyword or topic..."
         containerClassName="flex-1"
       />
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="secondary" size="md">
+            <ArrowUpDown className="size-4" />
+            {SORT_LABEL[sortBy]}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          {(Object.keys(SORT_LABEL) as QuestionSortBy[]).map((option) => (
+            <DropdownMenuItem key={option} onClick={() => onSortChange(option)}>
+              {SORT_LABEL[option]}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="secondary" size="md">
@@ -54,7 +97,7 @@ export function QuestionFilters({
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuContent align="end" className="w-64">
           <DropdownMenuLabel>Difficulty</DropdownMenuLabel>
           {DIFFICULTIES.map((difficulty) => (
             <DropdownMenuCheckboxItem
@@ -79,6 +122,39 @@ export function QuestionFilters({
               {subject}
             </DropdownMenuCheckboxItem>
           ))}
+          {availableTopics.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Topic</DropdownMenuLabel>
+              {availableTopics.map((topic) => (
+                <DropdownMenuCheckboxItem
+                  key={topic}
+                  checked={selectedTopics.includes(topic)}
+                  onSelect={(e) => e.preventDefault()}
+                  onCheckedChange={() => onToggleTopic(topic)}
+                >
+                  {topic}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </>
+          )}
+          {sourcePdfOptions.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Source PDF</DropdownMenuLabel>
+              {sourcePdfOptions.map((opt) => (
+                <DropdownMenuCheckboxItem
+                  key={opt.id}
+                  checked={sourcePdfId === opt.id}
+                  onSelect={(e) => e.preventDefault()}
+                  onCheckedChange={() => onSourcePdfChange(sourcePdfId === opt.id ? null : opt.id)}
+                  className="max-w-56 truncate"
+                >
+                  {opt.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

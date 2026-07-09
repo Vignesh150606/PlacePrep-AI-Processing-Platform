@@ -1,37 +1,62 @@
-import * as React from "react";
-import type { BookmarkableType } from "@placeprep/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Bookmark, BookmarkableType } from "@placeprep/shared";
+import { apiDelete, apiGet, apiPost } from "@/lib/api-client";
+import { useAuth } from "./use-auth";
+
+interface BookmarkListResponse {
+  items: Bookmark[];
+}
+
+export function useBookmarksList() {
+  const { session } = useAuth();
+  return useQuery({
+    queryKey: ["bookmarks"],
+    queryFn: () => apiGet<BookmarkListResponse>("/bookmarks"),
+    enabled: !!session,
+    staleTime: 30_000,
+  });
+}
 
 /**
- * In-memory only — no `/api/v1/bookmarks` backend endpoint exists yet (the
- * `bookmarks` table + RLS policies are already there, see
- * supabase/migrations/0002). Building the persistence API is a small new
- * feature, tracked as a Sprint 5 prerequisite in PROJECT_STATE.md, not a
- * bug fix — left out of this pass on purpose.
- *
- * FIX: this used to seed from `mocks/bookmarks.ts`, so every user saw 3
- * bookmarks they never made. That's fake data, not a demo — starts empty
- * now. Bookmarks made during a session are real user actions; they just
- * don't survive a reload until the backend exists.
+ * Same public shape (`isBookmarked`, `toggle`, `bookmarkedCount`) the old
+ * in-memory hook exposed, so every existing call site (QuestionCard,
+ * Question Bank, Company Detail, Dashboard) keeps working unmodified —
+ * only the persistence underneath changed.
  */
 export function useBookmarks() {
-  const [bookmarkedIds, setBookmarkedIds] = React.useState<Set<string>>(() => new Set());
+  const { data, isLoading } = useBookmarksList();
+  const queryClient = useQueryClient();
+  const bookmarks = data?.items ?? [];
 
-  const isBookmarked = React.useCallback(
-    (targetId: string) => bookmarkedIds.has(targetId),
-    [bookmarkedIds],
-  );
+  const isBookmarked = (targetId: string) => bookmarks.some((b) => b.targetId === targetId);
 
-  const toggle = React.useCallback((targetId: string, _type: BookmarkableType) => {
-    setBookmarkedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(targetId)) {
-        next.delete(targetId);
-      } else {
-        next.add(targetId);
-      }
-      return next;
-    });
-  }, []);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
 
-  return { isBookmarked, toggle, bookmarkedCount: bookmarkedIds.size };
+  const addMutation = useMutation({
+    mutationFn: ({ targetId, type }: { targetId: string; type: BookmarkableType }) =>
+      apiPost<Bookmark>("/bookmarks", { targetType: type, targetId }),
+    onSuccess: invalidate,
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: ({ targetId, type }: { targetId: string; type: BookmarkableType }) =>
+      apiDelete<null>(`/bookmarks/${type}/${targetId}`),
+    onSuccess: invalidate,
+  });
+
+  function toggle(targetId: string, type: BookmarkableType) {
+    if (isBookmarked(targetId)) {
+      removeMutation.mutate({ targetId, type });
+    } else {
+      addMutation.mutate({ targetId, type });
+    }
+  }
+
+  return {
+    bookmarks,
+    isBookmarked,
+    toggle,
+    bookmarkedCount: bookmarks.length,
+    isLoading,
+  };
 }
