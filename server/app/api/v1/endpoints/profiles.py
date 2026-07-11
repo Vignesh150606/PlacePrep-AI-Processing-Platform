@@ -1,7 +1,7 @@
 """
 Profile endpoints. The row itself is created automatically by the
 `handle_new_user()` Postgres trigger the moment Supabase Auth creates the
-`auth.users` row — there is deliberately no POST/create endpoint here.
+`auth.users` row -- there is deliberately no POST/create endpoint here.
 """
 from typing import Any, Dict, Optional
 

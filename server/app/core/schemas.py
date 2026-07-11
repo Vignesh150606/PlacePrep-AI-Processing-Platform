@@ -1,6 +1,6 @@
 """
 Base schema that serializes to camelCase JSON while keeping snake_case
-Python field names — so response models read naturally in Python
+Python field names -- so response models read naturally in Python
 (`profile.full_name`) but match the camelCase shape of the shared
 TypeScript types (`profile.fullName`) on the wire, with no per-field
 aliasing to keep in sync by hand.

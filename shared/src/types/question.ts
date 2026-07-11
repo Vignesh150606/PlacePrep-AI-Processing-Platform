@@ -21,7 +21,6 @@ export interface Question {
   companyId: UUID | null;
   difficulty: DifficultyLevel;
   sourcePdfId: UUID | null;
-  /** Page within the source PDF the question was extracted from, if known. */
   pageNumber: number | null;
   status: ModerationStatus;
   confidenceScore?: number;

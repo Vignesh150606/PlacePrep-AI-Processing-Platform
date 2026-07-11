@@ -1,5 +1,5 @@
 -- =============================================================================
--- PlacePrep — Sprint 3 Step 5: RLS + Storage
+-- PlacePrep -- Sprint 3 Step 5: RLS + Storage
 -- Run AFTER 0001_sprint3_schema.sql. Safe to re-run.
 -- =============================================================================
 

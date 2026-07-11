@@ -44,7 +44,7 @@ async def _fetch_role_id(user_id: str) -> Optional[int]:
 async def is_admin(current_user: CurrentUser = Depends(get_current_user)) -> bool:
     """Non-raising admin check. Use this (instead of `require_admin`) for
     endpoints that stay accessible to everyone but change behavior for
-    admins — e.g. the Question Bank showing pending-review questions to
+    admins -- e.g. the Question Bank showing pending-review questions to
     admins while students only ever see approved ones."""
     return await _fetch_role_id(current_user.id) == 3
 

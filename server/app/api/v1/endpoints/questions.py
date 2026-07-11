@@ -1,15 +1,28 @@
 """
-Question Bank endpoints — read-only surface for the questions the AI
-Processing Pipeline (see app/services/pipeline.py) has extracted, validated,
-de-duplicated, classified, and stored, PLUS (as of Module 8 — Admin Review)
-the write endpoints admins use to approve/reject/edit/delete a pending-review
-question before it's visible in the public Question Bank.
+Question Bank endpoints -- read-only surface for the questions the AI
+Processing Pipeline has extracted, validated, de-duplicated, classified,
+and stored, PLUS the write endpoints admins use to approve/reject/edit/
+delete/merge a pending-review question before it's visible in the public
+Question Bank.
 
-Non-admins only ever see `status == "approved"` questions by default — that
-mirrors the `questions_select_approved_or_admin` RLS policy from migration
-0002. We have to re-apply that filter here in application code because
-`get_supabase_admin()` is a service-role client that intentionally bypasses
-RLS (see core/supabase_client.py's own docstring on why).
+Non-admins only ever see `status == "approved"` questions by default --
+that mirrors the `questions_select_approved_or_admin` RLS policy from
+migration 0002. We have to re-apply that filter here in application code
+because `get_supabase_admin()` is a service-role client that intentionally
+bypasses RLS.
+
+PHASE 6 CHANGES:
+  - Real `page`/`pageSize` pagination with an accurate DB-side `total`
+    (via a `count="exact"` query mirroring the same server-side filters),
+    replacing the old flat `limit` param. HONEST CAVEAT: `company_id` and
+    `subject` still can't be filtered server-side in this embed shape
+    (they live behind a join postgrest can't push a WHERE into here without
+    a second round trip) -- when either is set, `total` reflects only the
+    current page after that Python-side filter, not the true DB-wide
+    count. This matches the pre-existing behavior for those two filters;
+    it's called out explicitly rather than silently pretended away.
+  - New `POST /{canonical_id}/merge` -- Admin Review "Merge" (see
+    services/question_merge.py for what actually happens).
 """
 from typing import Any, Dict, List, Optional
 
@@ -17,16 +30,14 @@ from fastapi import APIRouter, Depends, Query
 from postgrest.exceptions import APIError
 
 from app.api.deps import CurrentUser, get_current_user, is_admin, require_admin
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import AppException, NotFoundError
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
+from app.services import question_merge
 
 router = APIRouter()
 
-# Pull everything a question needs to render in one round trip: its own
-# columns, its options, one hop through question_topics -> topics -> subjects
-# for display names, and the linked company ids.
 _EMBED = (
     "*, "
     "question_options(id, label, option_text, is_correct, order_index), "
@@ -68,6 +79,8 @@ class QuestionResponse(CamelModel):
 class QuestionListResponse(CamelModel):
     items: List[QuestionResponse]
     total: int
+    page: int
+    page_size: int
 
 
 class QuestionStatusUpdateRequest(CamelModel):
@@ -79,6 +92,18 @@ class QuestionUpdateRequest(CamelModel):
     correct_explanation: Optional[str] = None
     difficulty: Optional[str] = None
     tags: Optional[List[str]] = None
+
+
+class QuestionMergeRequest(CamelModel):
+    duplicate_id: str
+
+
+class QuestionMergeResponse(CamelModel):
+    canonical: QuestionResponse
+    attempts_updated: int
+    bookmarks_reassigned: int
+    bookmarks_dropped_as_duplicate: int
+    wrong_answer_marks_merged: int
 
 
 def _row_to_response(row: Dict[str, Any]) -> QuestionResponse:
@@ -126,6 +151,23 @@ def _row_to_response(row: Dict[str, Any]) -> QuestionResponse:
     )
 
 
+def _apply_server_side_filters(query, *, admin: bool, status: Optional[str], difficulty: Optional[str],
+                                source_pdf_id: Optional[str], search: Optional[str]):
+    if admin:
+        if status and status in _VALID_STATUSES:
+            query = query.eq("status", status)
+    else:
+        query = query.eq("status", "approved")
+
+    if difficulty:
+        query = query.eq("difficulty", difficulty)
+    if source_pdf_id:
+        query = query.eq("source_pdf_id", source_pdf_id)
+    if search:
+        query = query.ilike("question_text", f"%{search}%")
+    return query
+
+
 @router.get("", response_model=ApiResponse[QuestionListResponse])
 async def list_questions(
     current_user: CurrentUser = Depends(get_current_user),
@@ -135,42 +177,44 @@ async def list_questions(
     company_id: Optional[str] = Query(None),
     subject: Optional[str] = Query(None),
     source_pdf_id: Optional[str] = Query(None),
-    status: Optional[str] = Query(None, description="pending-review | approved | rejected — admin only"),
-    limit: int = Query(300, le=500),
+    status: Optional[str] = Query(None, description="pending-review | approved | rejected -- admin only"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(300, ge=1, le=500),
 ):
     admin_client = get_supabase_admin()
+    start = (page - 1) * page_size
+    end = start + page_size - 1
 
-    query = admin_client.table("questions").select(_EMBED).order("created_at", desc=True).limit(limit)
-
-    if admin:
-        if status and status in _VALID_STATUSES:
-            query = query.eq("status", status)
-        # else: no status filter — admins see everything by default.
-    else:
-        # Non-admins can never see anything but approved questions, no matter
-        # what `status` they pass — this mirrors the RLS policy's intent.
-        query = query.eq("status", "approved")
-
-    if difficulty:
-        query = query.eq("difficulty", difficulty)
-    if source_pdf_id:
-        query = query.eq("source_pdf_id", source_pdf_id)
-    if search:
-        query = query.ilike("question_text", f"%{search}%")
-
+    query = admin_client.table("questions").select(_EMBED).order("created_at", desc=True).range(start, end)
+    query = _apply_server_side_filters(
+        query, admin=admin, status=status, difficulty=difficulty, source_pdf_id=source_pdf_id, search=search
+    )
     rows = query.execute().data or []
     items = [_row_to_response(r) for r in rows]
 
     # company_id / subject live behind a join in this embed shape, which
-    # postgrest can't filter on directly here without a second round trip —
-    # filtering the already-small result set in Python is simpler and, given
-    # the `limit` above, cheap.
+    # postgrest can't filter on directly here without a second round trip --
+    # filtering the already-small page in Python is simpler and, given the
+    # page_size cap above, cheap. See the module docstring for the honest
+    # `total` caveat this creates.
     if company_id:
         items = [q for q in items if q.company_id == company_id]
     if subject:
         items = [q for q in items if q.subject.lower() == subject.lower()]
 
-    return ok(data=QuestionListResponse(items=items, total=len(items)), message="Questions fetched.")
+    if company_id or subject:
+        total = len(items)
+    else:
+        count_query = admin_client.table("questions").select("id", count="exact")
+        count_query = _apply_server_side_filters(
+            count_query, admin=admin, status=status, difficulty=difficulty, source_pdf_id=source_pdf_id, search=search
+        )
+        total = count_query.execute().count or 0
+
+    return ok(
+        data=QuestionListResponse(items=items, total=total, page=page, page_size=page_size),
+        message="Questions fetched.",
+    )
 
 
 def _get_question_or_404(question_id: str) -> Dict[str, Any]:
@@ -196,10 +240,8 @@ async def update_question_status(
     payload: QuestionStatusUpdateRequest,
     _admin: CurrentUser = Depends(require_admin),
 ):
-    """Module 8 — Admin Review: Approve / Reject."""
+    """Module 8 -- Admin Review: Approve / Reject."""
     if payload.status not in ("approved", "rejected"):
-        from app.core.exceptions import AppException
-
         raise AppException("status must be 'approved' or 'rejected'.")
 
     _get_question_or_404(question_id)
@@ -213,10 +255,7 @@ async def update_question(
     payload: QuestionUpdateRequest,
     _admin: CurrentUser = Depends(require_admin),
 ):
-    """Module 8 — Admin Review: Edit. Only covers the fields an admin would
-    realistically need to fix after an imperfect extraction (question text,
-    explanation, difficulty, tags) — options aren't editable here yet (see
-    PROJECT_STATE.md for why that, plus Merge, are scoped out this pass)."""
+    """Module 8 -- Admin Review: Edit."""
     _get_question_or_404(question_id)
 
     updates: Dict[str, Any] = {}
@@ -235,9 +274,37 @@ async def update_question(
     return ok(data=_row_to_response(_get_question_or_404(question_id)), message="Question updated.")
 
 
+@router.post("/{canonical_id}/merge", response_model=ApiResponse[QuestionMergeResponse])
+async def merge_question(
+    canonical_id: str,
+    payload: QuestionMergeRequest,
+    _admin: CurrentUser = Depends(require_admin),
+):
+    """Module 8 -- Admin Review: Merge (Phase 6 -- see
+    services/question_merge.py for the real implementation: this is
+    genuinely destructive and touches quiz_attempts/bookmarks/
+    wrong_answer_marks, not just a status flip, so it's kept in its own
+    module rather than inlined here)."""
+    _get_question_or_404(canonical_id)
+    _get_question_or_404(payload.duplicate_id)
+
+    result = question_merge.merge_questions(canonical_id=canonical_id, duplicate_id=payload.duplicate_id)
+
+    return ok(
+        data=QuestionMergeResponse(
+            canonical=_row_to_response(_get_question_or_404(canonical_id)),
+            attempts_updated=result.attempts_updated,
+            bookmarks_reassigned=result.bookmarks_reassigned,
+            bookmarks_dropped_as_duplicate=result.bookmarks_dropped_as_duplicate,
+            wrong_answer_marks_merged=result.wrong_answer_marks_merged,
+        ),
+        message="Questions merged.",
+    )
+
+
 @router.delete("/{question_id}", response_model=ApiResponse[None])
 async def delete_question(question_id: str, _admin: CurrentUser = Depends(require_admin)):
-    """Module 8 — Admin Review: Delete. `question_options`/`question_topics`/
+    """Module 8 -- Admin Review: Delete. `question_options`/`question_topics`/
     `question_companies` all reference `questions.id` with ON DELETE CASCADE
     (migration 0001), so this cleans up in one call."""
     _get_question_or_404(question_id)

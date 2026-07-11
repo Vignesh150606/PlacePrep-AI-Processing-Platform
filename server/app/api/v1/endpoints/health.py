@@ -1,4 +1,4 @@
-"""Health check — used for uptime checks and to confirm the frontend can reach the backend."""
+"""Health check -- used for uptime checks and to confirm the frontend can reach the backend."""
 from fastapi import APIRouter
 
 from app.core.config import get_settings
@@ -16,6 +16,7 @@ async def health_check() -> ApiResponse[dict]:
             "supabase_configured": settings.is_supabase_configured,
             "ai_configured": settings.is_ai_configured,
             "ocr_configured": settings.OCR_ENABLED,
+            "rate_limit_enabled": settings.RATE_LIMIT_ENABLED,
         },
         message="PlacePrep API is running.",
     )

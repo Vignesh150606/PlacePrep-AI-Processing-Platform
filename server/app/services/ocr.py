@@ -1,20 +1,8 @@
 """
-OCR fallback for scanned/image-only PDFs (Sprint 4 fix #3).
-
-`pdf_text.py` decides *whether* OCR is needed (based on extracted-text
-density); this module does the actual OCR once that decision is made.
-
-Requires two SYSTEM packages beyond the pip requirements, neither of which
-pip can install for you:
-  - tesseract-ocr   (the OCR engine pytesseract shells out to)
-  - poppler-utils   (gives pdf2image a `pdftoppm` binary to rasterize pages)
-
-On Debian/Ubuntu (e.g. the Render deploy target):
-    apt-get update && apt-get install -y tesseract-ocr poppler-utils
-
-If those aren't present, `is_available()` returns False and the pipeline
-falls back to its previous behavior (surface `PdfTextExtractionError` for
-scanned PDFs) instead of crashing.
+OCR fallback for scanned/image-only PDFs (Sprint 4 fix #3), and the engine
+behind direct image uploads (Phase 6 -- see services/image_text.py, which
+is a thin wrapper reusing `image_to_string` below for a single-image input
+instead of a rasterized PDF page).
 """
 import logging
 from functools import lru_cache
@@ -27,8 +15,6 @@ logger = logging.getLogger(__name__)
 
 @lru_cache
 def is_available() -> bool:
-    """Cheap, import-only check — never raises. Cached because it's called
-    once per pipeline run and the answer can't change mid-process."""
     settings = get_settings()
     if not settings.OCR_ENABLED:
         return False
@@ -47,7 +33,7 @@ def is_available() -> bool:
         import pytesseract
 
         pytesseract.get_tesseract_version()
-    except Exception as exc:  # noqa: BLE001 — any missing-binary failure
+    except Exception as exc:  # noqa: BLE001 -- any missing-binary failure
         logger.warning("OCR requested but the tesseract binary isn't usable: %s", exc)
         return False
 
@@ -55,10 +41,6 @@ def is_available() -> bool:
 
 
 def ocr_pdf_bytes(pdf_bytes: bytes, *, max_pages: Optional[int] = None) -> str:
-    """Rasterizes each page and runs Tesseract over it. Returns the
-    concatenated per-page text (same shape as pdf_text.extract_text), or an
-    empty string if OCR isn't available/produced nothing — callers should
-    treat an empty result as "OCR didn't help" rather than crash."""
     if not is_available():
         return ""
 
@@ -69,7 +51,7 @@ def ocr_pdf_bytes(pdf_bytes: bytes, *, max_pages: Optional[int] = None) -> str:
 
     try:
         images = convert_from_bytes(pdf_bytes, dpi=settings.OCR_DPI)
-    except Exception as exc:  # noqa: BLE001 — poppler/decoding failures
+    except Exception as exc:  # noqa: BLE001 -- poppler/decoding failures
         logger.warning("OCR rasterization failed: %s", exc)
         return ""
 
@@ -80,7 +62,31 @@ def ocr_pdf_bytes(pdf_bytes: bytes, *, max_pages: Optional[int] = None) -> str:
     for i, image in enumerate(images):
         try:
             pages_text.append(pytesseract.image_to_string(image) or "")
-        except Exception as exc:  # noqa: BLE001 — a single bad page shouldn't fail the whole doc
+        except Exception as exc:  # noqa: BLE001 -- a single bad page shouldn't fail the whole doc
             logger.warning("OCR failed on page %d: %s", i + 1, exc)
 
     return "\n\n".join(t for t in pages_text if t.strip())
+
+
+def ocr_image_bytes(image_bytes: bytes) -> str:
+    """OCR a single standalone image (Phase 6 direct image upload --
+    services/image_text.py). Separate from `ocr_pdf_bytes` because there's
+    no `pdf2image` rasterization step: the bytes are already a raster
+    image, just opened directly with Pillow and handed to Tesseract."""
+    if not is_available():
+        return ""
+
+    import io
+
+    import pytesseract
+    from PIL import Image
+
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            # Tesseract wants a fully-decoded, non-lazy image; load() forces
+            # that while the buffer above is still in scope.
+            image.load()
+            return pytesseract.image_to_string(image) or ""
+    except Exception as exc:  # noqa: BLE001 -- decode/OCR failures of any kind
+        logger.warning("OCR failed on standalone image: %s", exc)
+        return ""

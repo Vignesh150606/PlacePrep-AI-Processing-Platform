@@ -1,5 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
+import { useSearch } from "@tanstack/react-router";
 import type { Question, QuestionResponse, QuizAttempt } from "@placeprep/shared";
 import { useQuestions } from "@/hooks/use-questions";
 import { useWrongAnswers } from "@/hooks/use-wrong-answers";
@@ -58,6 +59,10 @@ function selectQuestions(
 }
 
 export function QuizPage() {
+  // NEW (Sprint 1A): reads the `mode` search param the quiz route now
+  // validates (see router.tsx) so Bookmarks/Wrong Answers CTAs land in the
+  // right mode instead of the config form always defaulting to "mixed".
+  const { mode: initialMode } = useSearch({ from: "/app-layout/quiz" });
   const { data, isLoading, isError, refetch } = useQuestions();
   const { data: wrongAnswerData } = useWrongAnswers();
   const { data: bookmarkData } = useBookmarksList();
@@ -171,7 +176,11 @@ export function QuizPage() {
             description="Upload a placement PDF in the PDF Library — extracted questions will show up here automatically."
           />
         ) : (
-          <QuizConfigForm onStart={handleStart} />
+          // `key` forces a remount (and fresh react-hook-form defaultValues)
+          // when the incoming mode changes between client-side navigations,
+          // e.g. Bookmarks -> Quiz then later Wrong Answers -> Quiz without
+          // a full page reload in between.
+          <QuizConfigForm key={initialMode ?? "mixed"} onStart={handleStart} defaultMode={initialMode} />
         ))}
 
       {stage.step === "active" &&

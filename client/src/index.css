@@ -34,6 +34,14 @@
   --animate-fade-up: fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-fade-in: fade-in 0.3s ease-out both;
   --animate-slide-in-left: slide-in-left 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* NEW (Sprint 1A): mobile quiz palette bottom sheet — slides up from the
+     bottom edge, mirroring fade-up's easing but on the Y axis with a full
+     off-screen start so it reads as a sheet, not a fade. */
+  --animate-slide-in-bottom: slide-in-bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* NEW (Sprint 1A): command palette panel entrance on desktop (centered
+     modal) — a quick scale+fade rather than fade-up's vertical travel,
+     since the palette isn't anchored to an edge. */
+  --animate-scale-in: scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
 
   @keyframes fade-up {
     from {
@@ -64,6 +72,28 @@
     to {
       opacity: 1;
       transform: translateX(0);
+    }
+  }
+  /* NEW (Sprint 1A): mobile quiz palette bottom sheet entrance. */
+  @keyframes slide-in-bottom {
+    from {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  /* NEW (Sprint 1A): command palette desktop panel entrance. */
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
     }
   }
 }

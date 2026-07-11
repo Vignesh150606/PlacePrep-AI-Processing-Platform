@@ -1,10 +1,20 @@
 import * as React from "react";
-import { Flag, ChevronLeft, ChevronRight, RotateCcw, Timer as TimerIcon, Keyboard } from "lucide-react";
+import {
+  Flag,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
+  Timer as TimerIcon,
+  Keyboard,
+  LayoutGrid,
+  X,
+} from "lucide-react";
 import type { Question, QuestionResponse } from "@placeprep/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useDialogA11y } from "@/hooks/use-dialog-a11y";
 
 interface PerQuestionState {
   selectedOptionId: string | null;
@@ -31,6 +41,61 @@ function paletteClasses(state: PerQuestionState | undefined, isCurrent: boolean)
   return "border-incorrect-500/40 bg-incorrect-500/5 text-incorrect-600 dark:text-incorrect-500";
 }
 
+interface QuestionPaletteContentProps {
+  questions: Question[];
+  states: Record<string, PerQuestionState>;
+  currentIndex: number;
+  answeredCount: number;
+  markedCount: number;
+  onGoTo: (index: number) => void;
+  onSubmit: () => void;
+}
+
+/**
+ * NEW (Sprint 1A): the palette grid + stats + submit button, extracted out
+ * of the always-visible desktop Card so the exact same markup can be reused
+ * inside the mobile bottom sheet below — one source of truth instead of two
+ * copies that could drift.
+ */
+function QuestionPaletteContent({
+  questions,
+  states,
+  currentIndex,
+  answeredCount,
+  markedCount,
+  onGoTo,
+  onSubmit,
+}: QuestionPaletteContentProps) {
+  return (
+    <>
+      <div className="grid grid-cols-5 gap-1.5">
+        {questions.map((q, i) => (
+          <button
+            key={q.id}
+            type="button"
+            onClick={() => onGoTo(i)}
+            aria-label={`Go to question ${i + 1}`}
+            className={cn(
+              "flex size-8 items-center justify-center rounded-md border text-xs font-medium transition-colors",
+              paletteClasses(states[q.id], i === currentIndex),
+            )}
+          >
+            {i + 1}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-col gap-1 border-t border-border-subtle pt-3 text-xs text-muted-foreground">
+        <p>{answeredCount} answered</p>
+        <p>{questions.length - answeredCount} unanswered</p>
+        <p>{markedCount} marked for review</p>
+      </div>
+      <Button size="sm" variant="destructive" onClick={onSubmit} className="mt-1">
+        Submit quiz
+      </Button>
+    </>
+  );
+}
+
 export function QuizRunner({ questions, timeLimitMinutes, startedAt, onComplete }: QuizRunnerProps) {
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [states, setStates] = React.useState<Record<string, PerQuestionState>>(() =>
@@ -50,6 +115,14 @@ export function QuizRunner({ questions, timeLimitMinutes, startedAt, onComplete 
     timeLimitMinutes ? Math.max(0, timeLimitMinutes * 60 - elapsedAlreadySeconds) : null,
   );
   const submittedRef = React.useRef(false);
+  // NEW (Sprint 1A): mobile/tablet palette bottom sheet — see the render
+  // below for why this replaces the palette Card simply falling below the
+  // question card once the layout drops under the lg breakpoint.
+  const [paletteSheetOpen, setPaletteSheetOpen] = React.useState(false);
+  const { containerRef: paletteSheetRef } = useDialogA11y({
+    open: paletteSheetOpen,
+    onClose: () => setPaletteSheetOpen(false),
+  });
 
   const question = questions[currentIndex];
   const isLast = currentIndex === questions.length - 1;
@@ -149,10 +222,12 @@ export function QuizRunner({ questions, timeLimitMinutes, startedAt, onComplete 
   // submits on the last question. Ignored while a text input/textarea is
   // focused (none currently exist on this page, but this keeps the
   // handler safe if one is ever added) and while a modifier key is held,
-  // so it never shadows browser/OS shortcuts.
+  // so it never shadows browser/OS shortcuts. Also ignored while the
+  // mobile palette sheet is open (Sprint 1A) so its own Tab/Escape focus
+  // trap isn't fought by these global shortcuts underneath it.
   React.useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.ctrlKey || e.metaKey || e.altKey || !question) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || !question || paletteSheetOpen) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
 
@@ -296,7 +371,12 @@ export function QuizRunner({ questions, timeLimitMinutes, startedAt, onComplete 
         </CardContent>
       </Card>
 
-      <Card className="h-fit">
+      {/* FIX (Sprint 1A): previously rendered unconditionally, so once the
+          grid collapsed to one column below lg it fell below the question
+          card — reachable only by scrolling past it. Now desktop-only; the
+          mobile/tablet equivalent is the floating trigger + bottom sheet
+          below. */}
+      <Card className="hidden h-fit lg:block">
         <CardContent className="flex flex-col gap-3 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Question palette</p>
           <div
@@ -310,32 +390,74 @@ export function QuizRunner({ questions, timeLimitMinutes, startedAt, onComplete 
               <kbd className="rounded border border-border-subtle px-1 font-sans">M</kbd> mark
             </span>
           </div>
-          <div className="grid grid-cols-5 gap-1.5">
-            {questions.map((q, i) => (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => goTo(i)}
-                aria-label={`Go to question ${i + 1}`}
-                className={cn(
-                  "flex size-8 items-center justify-center rounded-md border text-xs font-medium transition-colors",
-                  paletteClasses(states[q.id], i === currentIndex),
-                )}
-              >
-                {i + 1}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-col gap-1 border-t border-border-subtle pt-3 text-xs text-muted-foreground">
-            <p>{answeredCount} answered</p>
-            <p>{questions.length - answeredCount} unanswered</p>
-            <p>{markedCount} marked for review</p>
-          </div>
-          <Button size="sm" variant="destructive" onClick={submit} className="mt-1">
-            Submit quiz
-          </Button>
+          <QuestionPaletteContent
+            questions={questions}
+            states={states}
+            currentIndex={currentIndex}
+            answeredCount={answeredCount}
+            markedCount={markedCount}
+            onGoTo={goTo}
+            onSubmit={submit}
+          />
         </CardContent>
       </Card>
+
+      {/* NEW (Sprint 1A): mobile/tablet palette access — a floating trigger
+          that opens a bottom sheet, so the palette is reachable without
+          scrolling past the question. */}
+      <button
+        type="button"
+        onClick={() => setPaletteSheetOpen(true)}
+        aria-label={`Open question palette. ${answeredCount} of ${questions.length} answered.`}
+        className="fixed bottom-5 right-4 z-40 flex items-center gap-2 rounded-full border border-border bg-surface-raised px-4 py-2.5 text-xs font-semibold text-foreground shadow-lg transition-colors hover:bg-surface lg:hidden"
+      >
+        <LayoutGrid className="size-4" />
+        {currentIndex + 1}/{questions.length}
+      </button>
+
+      {paletteSheetOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end lg:hidden">
+          <div
+            className="fixed inset-0 bg-black/50"
+            onClick={() => setPaletteSheetOpen(false)}
+            aria-hidden="true"
+          />
+          <div
+            ref={paletteSheetRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Question palette"
+            tabIndex={-1}
+            className="relative flex max-h-[70vh] flex-col gap-3 rounded-t-2xl border-t border-border bg-surface-raised p-4 shadow-xl animate-slide-in-bottom focus-visible:outline-none"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Question palette</p>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Close question palette"
+                onClick={() => setPaletteSheetOpen(false)}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+            <div className="flex flex-col gap-3 overflow-y-auto">
+              <QuestionPaletteContent
+                questions={questions}
+                states={states}
+                currentIndex={currentIndex}
+                answeredCount={answeredCount}
+                markedCount={markedCount}
+                onGoTo={(index) => {
+                  goTo(index);
+                  setPaletteSheetOpen(false);
+                }}
+                onSubmit={submit}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,7 @@
 """
 Bookmarks endpoints (Module 5). The `bookmarks` table and its RLS policies
-already existed (migration 0002_sprint3_rls_storage.sql) — this was purely a
-missing endpoint, the same shape of gap Question Bank/Companies had before
-the Sprint 4 completion pass (see PROJECT_STATE.md history).
+already existed (migration 0002_sprint3_rls_storage.sql) -- this was purely a
+missing endpoint.
 """
 from typing import List
 
@@ -67,7 +66,6 @@ async def create_bookmark(payload: BookmarkCreateRequest, current_user: CurrentU
         .data
     )
     if existing:
-        # Idempotent: bookmarking something already bookmarked just returns it.
         return ok(data=BookmarkResponse(**existing[0]), message="Already bookmarked.")
 
     row = (

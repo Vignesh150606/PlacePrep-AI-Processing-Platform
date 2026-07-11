@@ -5,28 +5,25 @@ Cleanup -> Notification.
 
 Two entry points, both called from `app/api/v1/endpoints/pdfs.py`:
 
-  create_job(pdf_resource_id)  — inserts a new `processing_jobs` row for
+  create_job(pdf_resource_id)  -- inserts a new `processing_jobs` row for
                                   a fresh attempt (initial upload or retry).
-  run_pipeline(job_id)         — does the actual work. Designed to run as a
-                                  FastAPI `BackgroundTask` (see technical
-                                  debt note in PROJECT_STATE.md about
-                                  moving this to a real queue).
+  run_pipeline(job_id)         -- does the actual work. Designed to run as a
+                                  FastAPI `BackgroundTask`.
 
-SPRINT 4 FIXES — "extracts zero questions from MCQ PDFs" investigation:
-Four independent causes were traced and fixed, each isolated in its own
-module so they can be reasoned about (and tested) separately:
-  1. Scanned/image-only PDFs (services/ocr.py + services/pdf_text.py's
-     quality check) — previously either failed outright or silently
-     extracted near-empty "text" (running headers only) that Gemini
-     correctly returned zero questions for.
-  2. Weak prompting (services/ai/gemini_provider.py) — no instruction for
-     "never skip/summarize" or how to use a separate answer key.
-  3. Answer key parsing (services/answer_key.py) — a key section in a
-     different part of the document (or different chunk, post-#4) than the
-     questions it belongs to.
-  4. Large document chunking (services/chunking.py) — a single call over an
-     entire long paper both risks truncated model output and dilutes
-     attention; now bounded per-chunk with merge + intra-run dedupe below.
+PHASE 6 CHANGE -- multi-format upload support: `pdf_resources.file_kind`
+(migration 0006) now distinguishes `'pdf'` from `'image'`. `_extract_document_text`
+below branches on it: a PDF goes through the existing native-text-then-OCR-
+fallback path (`pdf_text.py`); an image (a phone photo or a screenshot of
+a question paper) has no text layer to try first, so it goes straight to
+`image_text.py`, which is OCR-only by design. Everything downstream of
+that function (chunking, answer-key detection, Gemini extraction,
+validation, duplicate detection, classification, storage, notification) is
+completely unaware of which path the text came from -- both branches
+return the exact same `ExtractionResult` shape.
+
+Sprint 4 fixes (OCR fallback, prompt redesign, answer-key parsing,
+chunking) are unchanged from the prior pass -- see the module docstring
+history in PROJECT_STATE.md.
 """
 import logging
 from datetime import datetime, timezone
@@ -34,7 +31,7 @@ from typing import Any, Dict, List, Tuple
 
 from app.core.config import get_settings
 from app.core.supabase_client import get_supabase_admin
-from app.services import answer_key, chunking, classification, notifications, ocr
+from app.services import answer_key, chunking, classification, image_text, notifications, ocr
 from app.services.ai.base import AIProviderError, ExtractedQuestion
 from app.services.ai.service import get_ai_service
 from app.services.duplicate import check_duplicate, compute_content_hash
@@ -68,6 +65,11 @@ def create_job(pdf_resource_id: str) -> Dict[str, Any]:
 
 
 def _is_valid(item: ExtractedQuestion) -> bool:
+    """A valid MCQ must have real question text, a recognized type/
+    difficulty, and -- for mcq/multi-select -- at least two options with
+    exactly one (or more, for multi-select) marked correct. Anything that
+    fails this is rejected rather than stored, per the brief's own
+    requirement that incomplete questions never reach the Question Bank."""
     if not item.question_text or not item.question_text.strip():
         return False
     if item.type not in _VALID_TYPES:
@@ -92,10 +94,25 @@ def _page_offset_hint(chunk_index: int, chunk_total: int, page_count: int) -> st
 
 
 async def _extract_document_text(pdf_row: Dict[str, Any], file_bytes: bytes) -> Tuple[str, bool, int]:
-    """Returns (full_text, ocr_used, page_count). Tries native PDF text
-    first; falls back to OCR only when that text looks too sparse to be
-    real content (Sprint 4 fix #1/#3)."""
+    """Returns (full_text, ocr_used, page_count).
+
+    Branches on `pdf_row["file_kind"]` (Phase 6): a standalone image has no
+    embedded text layer to try first, so OCR isn't a *fallback* there, it's
+    the only path (`image_text.extract_text_from_image`, itself just a
+    thin wrapper over the same `ocr.py` Tesseract engine a scanned PDF
+    already uses). A real PDF keeps the original Sprint 4 behavior: try
+    native text extraction first, fall back to OCR only if that text looks
+    too sparse to be real content.
+    """
     settings = get_settings()
+    file_kind = pdf_row.get("file_kind", "pdf")
+
+    if file_kind == "image":
+        result = image_text.extract_text_from_image(file_bytes)
+        # An image upload is OCR by construction -- there's no "native text
+        # extraction succeeded" branch to report separately.
+        return result.full_text, True, result.page_count
+
     result = extract_text_with_quality(file_bytes)
 
     if not result.is_low_quality() and result.full_text.strip():
@@ -103,8 +120,6 @@ async def _extract_document_text(pdf_row: Dict[str, Any], file_bytes: bytes) -> 
 
     if not settings.OCR_ENABLED or not ocr.is_available():
         if result.full_text.strip():
-            # Low quality but non-empty and OCR isn't available — better to
-            # try extraction on what we have than fail outright.
             logger.warning(
                 "PDF '%s' looks scanned/low-text (%.1f chars/page) but OCR is unavailable; "
                 "proceeding with native extraction anyway.",
@@ -118,7 +133,7 @@ async def _extract_document_text(pdf_row: Dict[str, Any], file_bytes: bytes) -> 
         )
 
     logger.info(
-        "PDF '%s' looks scanned (%.1f chars/page across %d pages) — falling back to OCR.",
+        "PDF '%s' looks scanned (%.1f chars/page across %d pages) -- falling back to OCR.",
         pdf_row.get("file_name"),
         result.chars_per_page,
         result.page_count,
@@ -127,8 +142,6 @@ async def _extract_document_text(pdf_row: Dict[str, Any], file_bytes: bytes) -> 
     if ocr_text.strip():
         return ocr_text, True, result.page_count
 
-    # OCR didn't help either — fall back to whatever native text we had
-    # (possibly nothing), and let the final empty-text check below decide.
     if result.full_text.strip():
         return result.full_text, False, result.page_count
 
@@ -162,28 +175,20 @@ async def run_pipeline(job_id: str) -> None:
     inserted_count = 0
     duplicate_count = 0
     low_confidence_count = 0
-    rejected_count = 0
     ocr_used = False
     chunk_count = 1
 
     try:
-        file_bytes = admin.storage.from_(settings.PDF_STORAGE_BUCKET).download(pdf_row["storage_path"])
+        bucket = settings.PDF_STORAGE_BUCKET
+        file_bytes = admin.storage.from_(bucket).download(pdf_row["storage_path"])
         document_text, ocr_used, page_count = await _extract_document_text(pdf_row, file_bytes)
 
-        # Sprint 4 fix — pull a trailing "Answer Key" section out before
-        # chunking so it can be attached to every chunk's prompt rather than
-        # only whichever chunk it physically landed in.
         split = answer_key.split_answer_key(document_text)
         chunks = chunking.split_into_chunks(split.body_text)
         chunk_count = len(chunks)
 
         ai_service = get_ai_service()
 
-        # Merge extracted questions across all chunks, then de-duplicate
-        # WITHIN this run (before the cross-run DB duplicate check below) —
-        # chunk overlap (chunking.CHUNK_OVERLAP_CHARS) means the same
-        # question can legitimately get extracted twice from two adjacent
-        # chunks.
         all_extracted: List[ExtractedQuestion] = []
         seen_hashes_this_run: set[str] = set()
 
@@ -198,11 +203,6 @@ async def run_pipeline(job_id: str) -> None:
                     answer_key_text=split.key_text,
                 )
             except AIProviderError as exc:
-                # One bad chunk (e.g. a transient Gemini error) shouldn't
-                # necessarily fail the whole document if other chunks
-                # succeed — log and continue, but if EVERY chunk fails the
-                # `all_extracted` list stays empty and the pipeline still
-                # reports honestly (zero extracted) rather than a fake success.
                 logger.warning(
                     "Chunk %d/%d failed for '%s': %s", chunk.index + 1, chunk.total, pdf_row["file_name"], exc
                 )
@@ -218,7 +218,7 @@ async def run_pipeline(job_id: str) -> None:
 
         if not all_extracted and chunk_count > 0:
             logger.warning(
-                "Extraction produced zero questions for '%s' across %d chunk(s) — "
+                "Extraction produced zero questions for '%s' across %d chunk(s) -- "
                 "document may not contain MCQs, or every chunk call failed (see warnings above).",
                 pdf_row["file_name"],
                 chunk_count,
@@ -226,7 +226,6 @@ async def run_pipeline(job_id: str) -> None:
 
         for item in all_extracted:
             if not _is_valid(item):
-                rejected_count += 1
                 continue
 
             content_hash = compute_content_hash(item.question_text)
@@ -308,7 +307,7 @@ async def run_pipeline(job_id: str) -> None:
             settings=settings,
         )
 
-    except (PdfTextExtractionError, AIProviderError) as exc:
+    except (PdfTextExtractionError, image_text.ImageTextExtractionError, AIProviderError) as exc:
         _finish_failure(
             admin,
             job_id=job_id,
@@ -319,7 +318,7 @@ async def run_pipeline(job_id: str) -> None:
             ocr_used=ocr_used,
             chunk_count=chunk_count,
         )
-    except Exception as exc:  # noqa: BLE001 — never let an unexpected error leave a job stuck in "running"
+    except Exception as exc:  # noqa: BLE001 -- never let an unexpected error leave a job stuck in "running"
         logger.exception("Unexpected pipeline failure for job %s", job_id)
         _finish_failure(
             admin,
@@ -370,12 +369,12 @@ def _finish_success(
     if not pdf_row.get("keep_permanent"):
         try:
             admin.storage.from_(settings.PDF_STORAGE_BUCKET).remove([pdf_row["storage_path"]])
-        except Exception:  # noqa: BLE001 — don't fail a successful extraction over cleanup
-            logger.exception("Failed to delete temporary PDF %s after extraction", pdf_row["storage_path"])
+        except Exception:  # noqa: BLE001 -- don't fail a successful extraction over cleanup
+            logger.exception("Failed to delete temporary file %s after extraction", pdf_row["storage_path"])
 
     summary = f"Extracted {inserted_count} question(s) from \"{pdf_row['file_name']}\"."
     if ocr_used:
-        summary += " (OCR fallback was used — this looked like a scanned document.)"
+        summary += " (OCR was used to read this file.)"
     if chunk_count > 1:
         summary += f" Processed in {chunk_count} chunks."
     if duplicate_count:
@@ -383,7 +382,7 @@ def _finish_success(
     if low_confidence_count:
         summary += f" {low_confidence_count} flagged for review."
     if inserted_count == 0:
-        summary += " No questions were found — this PDF may not contain MCQs, or extraction quality was too low; check the Processing Dashboard for details."
+        summary += " No questions were found -- this file may not contain MCQs, or extraction quality was too low; check the Processing Dashboard for details."
 
     notifications.notify(
         user_id=uploader_id,

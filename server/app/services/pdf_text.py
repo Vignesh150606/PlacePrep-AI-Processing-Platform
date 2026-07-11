@@ -4,7 +4,7 @@ Extracts plain text from a PDF's raw bytes.
 import io
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 from pypdf import PdfReader
 
@@ -21,7 +21,7 @@ class PdfTextExtractionError(AppException):
 
 @dataclass
 class PageText:
-    page_number: int  # 1-indexed, matches what a human would call "page N"
+    page_number: int
     text: str
 
 
@@ -41,15 +41,13 @@ class ExtractionResult:
         return sum(len(p.text) for p in self.pages) / self.page_count
 
     def is_low_quality(self) -> bool:
-        """True if this PDF is very likely scanned/image-only rather than a
-        genuinely short document — see OCR_MIN_CHARS_PER_PAGE."""
         return self.chars_per_page < get_settings().OCR_MIN_CHARS_PER_PAGE
 
 
 def extract_text_with_quality(pdf_bytes: bytes) -> ExtractionResult:
     try:
         reader = PdfReader(io.BytesIO(pdf_bytes))
-    except Exception as exc:  # noqa: BLE001 — pypdf raises several exception types
+    except Exception as exc:  # noqa: BLE001 -- pypdf raises several exception types
         raise PdfTextExtractionError(f"This file could not be read as a PDF: {exc}")
 
     if reader.is_encrypted:
@@ -62,7 +60,7 @@ def extract_text_with_quality(pdf_bytes: bytes) -> ExtractionResult:
     for i, page in enumerate(reader.pages):
         try:
             pages.append(PageText(page_number=i + 1, text=page.extract_text() or ""))
-        except Exception as exc:  # noqa: BLE001 — a single malformed page shouldn't fail the whole doc
+        except Exception as exc:  # noqa: BLE001 -- a single malformed page shouldn't fail the whole doc
             logger.warning("Failed to extract text from page %d: %s", i + 1, exc)
             pages.append(PageText(page_number=i + 1, text=""))
 
@@ -70,13 +68,11 @@ def extract_text_with_quality(pdf_bytes: bytes) -> ExtractionResult:
 
 
 def extract_text(pdf_bytes: bytes) -> str:
-    """Back-compat convenience wrapper — prefer extract_text_with_quality()
-    for new code so callers can make an OCR-fallback decision."""
     result = extract_text_with_quality(pdf_bytes)
     text = result.full_text
     if not text.strip():
         raise PdfTextExtractionError(
             "No selectable text found in this PDF. Scanned/image-only PDFs "
-            "aren't supported yet — OCR is planned for a future sprint."
+            "go through the OCR fallback automatically -- see services/ocr.py."
         )
     return text

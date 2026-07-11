@@ -4,7 +4,7 @@ Verifies Supabase-issued access tokens.
 New Supabase projects (including this one) sign session JWTs with an
 asymmetric ES256 key pair rather than a shared HS256 secret. That means
 verification only ever needs the *public* half of the key, fetched once
-from Supabase's JWKS endpoint and cached in-process by `PyJWKClient` —
+from Supabase's JWKS endpoint and cached in-process by `PyJWKClient` --
 no network call to Supabase on every request, and no secret to leak.
 """
 from functools import lru_cache

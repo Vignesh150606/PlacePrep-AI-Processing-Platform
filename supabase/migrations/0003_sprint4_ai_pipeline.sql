@@ -1,5 +1,5 @@
 -- =============================================================================
--- PlacePrep — Sprint 4: AI Processing Platform
+-- PlacePrep -- Sprint 4: AI Processing Platform
 -- Run AFTER 0001 and 0002. Safe to re-run.
 -- =============================================================================
 

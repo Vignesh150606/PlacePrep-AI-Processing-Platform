@@ -1,5 +1,5 @@
 """
-AIService — the single entry point the pipeline calls into.
+AIService -- the single entry point the pipeline calls into.
 """
 from functools import lru_cache
 from typing import Optional
@@ -23,7 +23,7 @@ class AIService:
         answer_key_text: Optional[str] = None,
     ) -> AIExtractionResult:
         if not document_text.strip():
-            raise AIProviderError("No extractable text found in this PDF portion.")
+            raise AIProviderError("No extractable text found in this document portion.")
         return await self._provider.extract_questions(
             document_text=document_text,
             source_hint=source_hint,

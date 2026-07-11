@@ -3,24 +3,16 @@ Gemini implementation of `AIProvider` (Step 3/4).
 
 This is the *only* file in the codebase that imports the `google.genai`
 SDK. Everything upstream (the pipeline, the API endpoints) talks to
-`AIProvider`, not to Gemini — see base.py for why.
+`AIProvider`, not to Gemini -- see base.py for why.
 
 PROMPT REDESIGN (Sprint 4 fix #2): the previous prompt asked for a JSON
 array with the same fields but had three gaps that plausibly explained the
 "extracts zero questions" bug report:
   1. No instruction covering the extremely common "questions in one section,
-     answers in a separate Answer Key section" layout — a model with no
-     guidance here would either invent answers (hurting confidence/accuracy)
-     or, worse, refuse to mark any option `is_correct` at all, which then
-     fails validation in pipeline._is_valid() (an MCQ with no correct option
-     is rejected) and silently produces a low/zero extraction count.
-  2. No explicit "never skip a question" / "never summarize" instruction —
-     a model given a long block of dense text will sometimes editorialize
-     ("the paper also includes 5 more similar questions on X") instead of
-     extracting each one, especially once it senses the array is getting
-     long.
-  3. No page_number field, so provenance ("Source PDF", "Page Number" from
-     the spec) was incomplete even for correctly-extracted questions.
+     answers in a separate Answer Key section" layout.
+  2. No explicit "never skip a question" / "never summarize" instruction.
+  3. No page_number field, so provenance was incomplete even for
+     correctly-extracted questions.
 This version fixes all three, and is chunk-aware (Sprint 4 fix #4) so a
 single call is never asked to process more than one chunk's worth of text.
 """
@@ -43,26 +35,26 @@ from app.services.ai.base import (
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You are an expert at extracting placement/interview \
-preparation questions from raw text pulled out of a PDF (question papers, \
-previous-year sets, interview experience writeups). You will be given ONE \
-PORTION of a possibly larger document, and must extract every question that \
-portion contains.
+preparation questions from raw text pulled out of a PDF or a photographed/\
+scanned question paper (question papers, previous-year sets, interview \
+experience writeups). You will be given ONE PORTION of a possibly larger \
+document, and must extract every question that portion contains.
 
-STRICT RULES — follow all of them:
+STRICT RULES -- follow all of them:
 1. Extract EVERY multiple-choice question in the given text. Never skip one \
 because it looks similar to a previous one, and never summarize a run of \
 questions instead of extracting each ("the next 5 questions follow the same \
-pattern" is NOT acceptable output — extract all 5 individually).
+pattern" is NOT acceptable output -- extract all 5 individually).
 2. Never invent a question, option, or answer that is not present in the \
 source text.
 3. If a separate "Answer Key" / "Answers" / "Solutions" section is provided \
 below (under ANSWER KEY, if present), use it to determine each question's \
-correct option by matching question numbers — do not guess an answer from \
+correct option by matching question numbers -- do not guess an answer from \
 the question text alone if the key disagrees or the text alone is \
 ambiguous. If a question's number has no entry in the answer key and the \
 correct option truly cannot be determined, still include the question with \
 your best-effort option marked correct but LOWER its confidence \
-substantially (0.3 or below) to flag it for human review — never omit the \
+substantially (0.3 or below) to flag it for human review -- never omit the \
 question entirely just because you're unsure of the answer.
 4. Return ONLY a JSON array (no markdown fences, no prose before or after, \
 no trailing commas). Each element must have EXACTLY this shape:
@@ -85,19 +77,20 @@ FIELD NOTES:
 - "options" is only for "mcq"/"multi-select" types; use an empty array for \
 "coding"/"subjective".
 - "confidence" reflects YOUR certainty that question_text, options, and the \
-correct answer were all extracted accurately from the source text — not \
+correct answer were all extracted accurately from the source text -- not \
 how hard the question is. Lower it whenever the source text is garbled \
-(e.g. OCR noise), ambiguous, or the answer had to be inferred without a \
-matching answer-key entry.
+(e.g. OCR noise from a phone-photo upload), ambiguous, or the answer had to \
+be inferred without a matching answer-key entry.
 - "correct_explanation" should be filled from the source text if a \
-rationale is given; otherwise null — never fabricate a plausible-sounding \
+rationale is given; otherwise null -- never fabricate a plausible-sounding \
 explanation for a fact you're not extracting from the text.
 - "subject" is a broad area (e.g. "Data Structures", "DBMS", "Aptitude"). \
 "topic" is more specific (e.g. "Binary Trees", "Normalization").
 - "page_number" is the 1-indexed page (within the FULL original document, \
 not just this portion) the question appears to start on, if the text \
 includes any page markers/headers/footers that let you infer it; otherwise \
-null. Use the page-range hint given below as a sanity bound.
+null. Use the page-range hint given below as a sanity bound. For a single \
+photographed/screenshotted image (not a multi-page PDF), always use 1.
 - If the given text portion contains no extractable questions (e.g. it's \
 purely an answer key, a cover page, or instructions), return [].
 """
@@ -157,11 +150,6 @@ class GeminiProvider(AIProvider):
         page_offset_hint: Optional[str],
         answer_key_text: Optional[str],
     ) -> str:
-        # Chunk text is already bounded by services/chunking.py's
-        # CHUNK_MAX_CHARS, but keep a hard ceiling here too as a last-resort
-        # safety net in case chunking is ever bypassed (e.g. direct calls in
-        # tests) — 60k chars is comfortably within Gemini 2.5 Flash's context
-        # window even after the system prompt and answer key are added.
         truncated = document_text[:60_000]
         hint_line = f"Source filename: {source_hint}\n" if source_hint else ""
         chunk_line = (
@@ -171,7 +159,7 @@ class GeminiProvider(AIProvider):
         )
         page_line = f"Page-range hint for this portion: {page_offset_hint}\n" if page_offset_hint else ""
         key_block = (
-            f"\nANSWER KEY (from elsewhere in the same document — use this to determine correct options):\n\"\"\"\n{answer_key_text[:4000]}\n\"\"\"\n"
+            f"\nANSWER KEY (from elsewhere in the same document -- use this to determine correct options):\n\"\"\"\n{answer_key_text[:4000]}\n\"\"\"\n"
             if answer_key_text
             else ""
         )
@@ -191,7 +179,7 @@ class GeminiProvider(AIProvider):
                 contents=prompt,
                 config={"response_mime_type": "application/json"},
             )
-        except Exception as exc:  # noqa: BLE001 — any SDK/network failure
+        except Exception as exc:  # noqa: BLE001 -- any SDK/network failure
             raise AIProviderError(f"Gemini request failed: {exc}") from exc
 
         text = getattr(response, "text", None)

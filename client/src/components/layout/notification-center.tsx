@@ -1,10 +1,11 @@
 import { Bell, Loader2 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -60,32 +61,49 @@ export function NotificationCenter() {
           <EmptyState icon={Bell} title="No notifications" className="border-none px-4 py-8" />
         ) : (
           <ul className="max-h-80 overflow-y-auto py-1">
-            {notifications.map((notification) => (
-              <li
-                key={notification.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  if (!notification.isRead) markRead.mutate(notification.id);
-                  if (notification.linkUrl) navigate({ to: notification.linkUrl });
-                }}
-                className={cn(
-                  "flex cursor-pointer flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-surface",
-                  !notification.isRead && "bg-accent-600/5",
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-foreground">{notification.title}</p>
-                  {!notification.isRead && <span className="size-1.5 shrink-0 rounded-full bg-accent-600" />}
-                </div>
-                <p className="text-xs text-muted-foreground">{notification.message}</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {formatRelativeTime(notification.createdAt)}
-                </p>
-              </li>
-            ))}
+            {notifications.map((notification) => {
+              function activate() {
+                if (!notification.isRead) markRead.mutate(notification.id);
+                if (notification.linkUrl) navigate({ to: notification.linkUrl });
+              }
+              return (
+                <li
+                  key={notification.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={activate}
+                  // FIX (Sprint 1A): this was role="button" tabIndex={0} with
+                  // no onKeyDown, so Enter/Space did nothing for keyboard
+                  // users. Now maps both to the same action as onClick.
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      activate();
+                    }
+                  }}
+                  className={cn(
+                    "flex cursor-pointer flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    !notification.isRead && "bg-accent-600/5",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-foreground">{notification.title}</p>
+                    {!notification.isRead && <span className="size-1.5 shrink-0 rounded-full bg-accent-600" />}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{notification.message}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {formatRelativeTime(notification.createdAt)}
+                  </p>
+                </li>
+              );
+            })}
           </ul>
         )}
+        <DropdownMenuSeparator className="my-0" />
+        {/* NEW (Sprint 1A): footer link into the new standalone Notifications page. */}
+        <DropdownMenuItem asChild className="justify-center text-xs font-medium text-accent-600">
+          <Link to="/notifications">View all</Link>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

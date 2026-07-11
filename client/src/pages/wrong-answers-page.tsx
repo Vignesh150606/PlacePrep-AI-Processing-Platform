@@ -101,7 +101,10 @@ export function WrongAnswersPage() {
           )}
           {visibleEntries.length > 0 && (
             <Button asChild size="sm">
-              <Link to="/quiz">
+              {/* FIX (Sprint 1A): was Link to="/quiz" with no mode, so the
+                  config form always defaulted to "mixed" — now lands
+                  directly in the Wrong Answers quiz mode. */}
+              <Link to="/quiz" search={{ mode: "wrong-answers" }}>
                 <RotateCcw className="size-3.5" />
                 Retry all
               </Link>

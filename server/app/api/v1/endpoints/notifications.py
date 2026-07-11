@@ -1,5 +1,5 @@
 """
-Notification read endpoints — the counterpart to `app.services.notifications`
+Notification read endpoints -- the counterpart to `app.services.notifications`
 (which only writes).
 """
 from typing import List, Optional

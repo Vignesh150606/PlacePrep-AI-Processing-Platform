@@ -9,14 +9,10 @@ accurate status):
 
 - Authentication (Google OAuth via Supabase) + protected routing
 - Full database schema, RLS policies, and storage buckets
-- PDF upload -> AI extraction -> validation -> duplicate detection ->
+- PDF/image upload -> AI extraction -> validation -> duplicate detection ->
   classification -> storage -> cleanup -> notification pipeline
 - Notifications (real backend + UI)
-- Dashboard, Question Bank, Quiz, Companies, PDF Library UI (some still on
-  mock data pending their own wiring sprint — tracked as known debt in
-  `PROJECT_STATE.md`, not silently forgotten)
-
-Not yet started: standalone Bookmarks page, Wrong Answer Notebook, global
-search, Interview Experiences backend, Community.
+- Dashboard, Question Bank, Quiz, Companies, PDF Library UI
+- Global search, Daily Challenge, Admin merge tooling (Phase 6 pass)
 
 Milestones are tracked in `PROJECT_STATE.md`.

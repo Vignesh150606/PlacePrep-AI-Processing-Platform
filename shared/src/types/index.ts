@@ -15,3 +15,5 @@ export * from "./calendar-event";
 export * from "./activity-log";
 export * from "./file-upload";
 export * from "./api-response";
+export * from "./daily-challenge";
+export * from "./search";

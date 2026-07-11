@@ -17,11 +17,13 @@ copy .env.example .env   # Windows
 # cp .env.example .env   # macOS/Linux
 ```
 
-### OCR fallback — extra system packages (Sprint 4)
+### OCR fallback / direct image upload -- extra system packages
 
-Scanned/image-only PDFs are now handled automatically via an OCR fallback
-(`app/services/ocr.py`), but `pip install` alone is **not** enough for it to
-work — `pytesseract` and `pdf2image` are thin wrappers around two system
+Scanned/image-only PDFs go through an OCR fallback (`app/services/ocr.py`),
+and a directly-uploaded PNG/JPG/JPEG (a phone photo or screenshot of a
+question paper -- Phase 6) is OCR-only by construction
+(`app/services/image_text.py`). `pip install` alone is **not** enough for
+either -- `pytesseract` and `pdf2image` are thin wrappers around two system
 binaries pip cannot install:
 
 ```bash
@@ -33,11 +35,18 @@ brew install tesseract poppler
 ```
 
 If these aren't present, OCR is simply skipped (`OCR_ENABLED=true` in
-`.env` but `app/services/ocr.is_available()` returns `False`) — scanned PDFs
-will fail extraction with the same "no selectable text" error as before this
-pass, rather than crashing the server. Check `GET /api/v1/health` —
-`ocr_configured` reflects the `OCR_ENABLED` setting (not the same as OCR
-being actually *usable*; that's only checked lazily on first use).
+`.env` but `app/services/ocr.is_available()` returns `False`) -- scanned
+PDFs fail extraction with a clear "no selectable text" error, and image
+uploads fail with a clear "OCR is required but unavailable" error, rather
+than crashing the server. Check `GET /api/v1/health` -- `ocr_configured`
+reflects the `OCR_ENABLED` setting (not the same as OCR being actually
+*usable*; that's only checked lazily on first use).
+
+**This pass verified the full image-upload OCR path end-to-end** against a
+real Tesseract binary in the build sandbox: a synthetic image containing
+real question text ("What is the capital of France? A) Berlin B) Paris
+C) Madrid D) Rome") was fed through `image_text.extract_text_from_image()`
+and correctly OCR'd back, including both the question and every option.
 
 ## Run
 
@@ -46,78 +55,91 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 Then check:
-- http://localhost:8000/docs — interactive Swagger docs
-- http://localhost:8000/api/v1/health — health check
+- http://localhost:8000/docs -- interactive Swagger docs
+- http://localhost:8000/api/v1/health -- health check
+
+## Rate limiting (Phase 6)
+
+Basic per-IP rate limiting via `slowapi` (`app/core/rate_limit.py`), on by
+default (`RATE_LIMIT_ENABLED=true`). Stricter limits apply to `/pdfs/upload`
+(10/minute -- each call can fan out into several Gemini API calls) and
+`/quizzes/attempts/{id}/submit` (30/minute); everything else falls under a
+general default (120/minute).
+
+**Honest limitation:** the default storage backend is in-process memory.
+That's correct for a single-instance deploy, but each additional instance
+behind a load balancer enforces its own counters independently -- the
+effective limit becomes `configured_limit * instance_count`, not the
+configured limit. Set `RATE_LIMIT_STORAGE_URI` to a Redis URL before
+scaling horizontally; no code change needed.
 
 ## Deploying (Render, or similar)
 
-Two environment variables are the most common source of deploy-day bugs —
-double check these on every deployed environment, not just locally:
+1. **`CORS_ORIGINS`** -- your real deployed frontend origin(s).
+2. **`SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY`**.
+3. **`tesseract-ocr` / `poppler-utils`** (see above) for OCR / image upload.
+4. **Run all six migrations, in order** (`supabase/migrations/0001` through
+   `0006`) against your Supabase project's SQL editor before deploying this
+   version of the backend -- `0006` adds columns and a function this
+   version's code depends on (`pdf_resources.file_kind`,
+   `bulk_increment_question_stats()`, the Daily Challenge tables).
+5. Optionally set `RATE_LIMIT_STORAGE_URI` to a Redis URL if deploying more
+   than one instance (see above).
 
-1. **`CORS_ORIGINS`** — must be your real deployed frontend origin(s),
-   comma-separated (e.g. `https://your-app.vercel.app`). Left at the
-   `localhost` default, every request from your deployed frontend is
-   silently blocked by the browser with no server-side error. Set
-   `ENVIRONMENT=production` too — the app logs a startup warning if it
-   detects this misconfiguration.
-2. **`SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY`** —
-   from your Supabase project's API settings (current publishable/secret
-   key system, not the deprecated anon/service_role naming).
-3. **`tesseract-ocr` / `poppler-utils`** (see above) if you want the OCR
-   fallback to actually run on the deployed instance, not just locally.
-
-Also make sure your Supabase project's **Authentication → URL Configuration**
-(Site URL + Redirect URLs) and your Google Cloud OAuth client's **Authorized
-JavaScript origins** both list your real deployed frontend URL — these are
-configured in Supabase/Google, not in this backend, but a mismatch there
-causes login to redirect to the wrong place after Google auth completes.
+Also make sure your Supabase project's **Authentication -> URL
+Configuration** and your Google Cloud OAuth client's **Authorized
+JavaScript origins** both list your real deployed frontend URL.
 
 ## Structure
 
 ```
 server/
   app/
-    main.py              # FastAPI app factory + entry point
+    main.py                 # FastAPI app factory + rate-limiter wiring
     core/
-      config.py           # Settings (env-driven, single source of truth)
-      logging_config.py   # Centralized logging setup
-      exceptions.py        # AppException + handlers -> ApiResponse envelope
-      responses.py         # ApiResponse{success,message,data,errors}
-      schemas.py           # CamelModel — snake_case Python <-> camelCase JSON
-      security.py          # Supabase JWT verification
-      supabase_client.py   # Service-role Supabase client
+      config.py              # Settings (env-driven, single source of truth)
+      logging_config.py
+      exceptions.py           # AppException + handlers -> ApiResponse envelope
+      responses.py            # ApiResponse{success,message,data,errors}
+      schemas.py              # CamelModel -- snake_case Python <-> camelCase JSON
+      security.py             # Supabase JWT verification
+      supabase_client.py      # Service-role Supabase client
+      rate_limit.py           # NEW (Phase 6) -- slowapi wiring
     api/
-      deps.py              # get_current_user / is_admin / require_admin
+      deps.py                 # get_current_user / is_admin / require_admin
       v1/
-        router.py           # Aggregates all v1 routes
+        router.py              # Aggregates all v1 routes
         endpoints/
           health.py
           profiles.py
-          pdfs.py
-          questions.py       # + Module 8 admin review (approve/reject/edit/delete)
+          pdfs.py               # + multi-format upload, pagination, SSE status stream
+          questions.py          # + pagination, admin Merge
           companies.py
           processing.py
           notifications.py
-          quizzes.py         # NEW — quiz attempts + Wrong Answer Notebook
-          bookmarks.py       # NEW — Module 5
+          quizzes.py            # + bulk-increment fix, /trend
+          bookmarks.py
+          search.py             # NEW (Phase 6) -- global search
+          daily_challenge.py    # NEW (Phase 6) -- today/complete/streak
     services/
-      pipeline.py           # Queued -> Processing -> Extraction -> ... -> Notification
-      pdf_text.py           # pypdf-based text extraction + per-page quality signal
-      ocr.py                # NEW — scanned-PDF OCR fallback (Sprint 4 fix #3)
-      chunking.py           # NEW — large-PDF chunk splitting (Sprint 4 fix #4)
-      answer_key.py         # NEW — separates a trailing "Answer Key" section pre-chunking
-      duplicate.py          # exact hash + rapidfuzz fuzzy match
-      classification.py     # subject/topic/company upsert + confidence gating
-      notifications.py      # thin insert wrapper
+      pipeline.py              # Queued -> ... -> Notification, now format-agnostic
+      pdf_text.py               # pypdf-based text extraction + quality signal
+      image_text.py             # NEW (Phase 6) -- OCR-only extraction for a standalone image
+      ocr.py                    # + ocr_image_bytes() for standalone images
+      chunking.py
+      answer_key.py
+      duplicate.py
+      classification.py
+      notifications.py
+      question_merge.py         # NEW (Phase 6) -- Admin Review "Merge"
       ai/
-        base.py              # AIProvider interface
-        service.py            # AIService — pipeline's single entry point
-        gemini_provider.py    # Gemini implementation — redesigned prompt (Sprint 4 fix #2)
+        base.py
+        service.py
+        gemini_provider.py
   requirements.txt
   .env.example
 ```
 
-Every endpoint returns the same envelope — `{success, message, data, errors}` —
-via `ok()` / `fail()` in `app/core/responses.py`, and every error (validation,
-typed `AppException`, or unhandled) is normalized to that same shape by the
-handlers in `app/core/exceptions.py`.
+Every endpoint returns the same envelope --
+`{success, message, data, errors}` -- via `ok()` / `fail()` in
+`app/core/responses.py`, and every error is normalized to that same shape.

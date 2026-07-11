@@ -23,9 +23,7 @@ export interface QuestionResponse {
   selectedOptionIds: UUID[];
   isCorrect: boolean;
   timeSpentSeconds: number;
-  /** True if the student never selected an option for this question. */
   wasSkipped: boolean;
-  /** True if the student flagged this question via "Mark for Review". */
   markedForReview: boolean;
 }
 
@@ -51,9 +49,6 @@ export interface QuizAttempt {
   completedAt: ISODateString | null;
 }
 
-/** Per-question palette state used while a quiz is in progress (not persisted
- * until submit/autosubmit — the in-progress attempt row only stores question
- * ids + start time so a page refresh can restore the shell of the session). */
 export interface QuizAttemptQuestionState {
   questionId: UUID;
   selectedOptionId: UUID | null;

@@ -1,5 +1,5 @@
 """
-v1 API router — every versioned route is aggregated here, then mounted once
+v1 API router -- every versioned route is aggregated here, then mounted once
 in `app.main` under `settings.API_V1_PREFIX`.
 """
 from fastapi import APIRouter
@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     bookmarks,
     companies,
+    daily_challenge,
     health,
     notifications,
     pdfs,
@@ -14,6 +15,7 @@ from app.api.v1.endpoints import (
     profiles,
     questions,
     quizzes,
+    search,
 )
 
 api_router = APIRouter()
@@ -26,3 +28,5 @@ api_router.include_router(processing.router, prefix="/processing", tags=["Proces
 api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 api_router.include_router(quizzes.router, prefix="/quizzes", tags=["Quizzes"])
 api_router.include_router(bookmarks.router, prefix="/bookmarks", tags=["Bookmarks"])
+api_router.include_router(search.router, prefix="/search", tags=["Search"])
+api_router.include_router(daily_challenge.router, prefix="/daily-challenge", tags=["Daily Challenge"])

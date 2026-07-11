@@ -52,17 +52,4 @@ class AIProvider(ABC):
         page_offset_hint: Optional[str] = None,
         answer_key_text: Optional[str] = None,
     ) -> AIExtractionResult:
-        """
-        chunk_index/chunk_total: which piece of a larger, chunked document
-        this call covers (Sprint 4 fix #4) — 0/1 for an unchunked document.
-        page_offset_hint: free-text hint about which pages this chunk roughly
-        covers (e.g. "pages 4-9 of 12"), passed through to the prompt so the
-        model's page_number guesses stay plausible even though it only sees
-        one chunk's worth of text at a time.
-        answer_key_text: raw text of a separately-listed "Answer Key" section
-        detected by services/answer_key.py, if any — attached to every chunk's
-        prompt (not just the chunk the key physically appeared in) so the
-        model can correctly associate each question with its answer even
-        when the key section landed in a different chunk (Sprint 4 fix).
-        """
         raise NotImplementedError

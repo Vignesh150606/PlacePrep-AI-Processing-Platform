@@ -2,7 +2,7 @@
 Centralized exception handling.
 
 `AppException` (and its subclasses below) is what business logic should
-raise deliberately — e.g. `raise NotFoundError("Question not found.")`.
+raise deliberately -- e.g. `raise NotFoundError("Question not found.")`.
 The handlers registered in `register_exception_handlers()` make sure those,
 FastAPI's own validation errors, and anything truly unexpected all come
 back through the same `ApiResponse` envelope instead of FastAPI's default
@@ -46,6 +46,11 @@ class UnauthorizedError(AppException):
 class ForbiddenError(AppException):
     status_code = status.HTTP_403_FORBIDDEN
     message = "You do not have permission to perform this action."
+
+
+class RateLimitedError(AppException):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    message = "Too many requests. Please slow down and try again shortly."
 
 
 def register_exception_handlers(app: FastAPI) -> None:

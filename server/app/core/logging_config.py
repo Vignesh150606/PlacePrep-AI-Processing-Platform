@@ -2,7 +2,7 @@
 Centralized logging configuration.
 
 Call `configure_logging()` once, at startup (see `app.main`). Every other
-module should just do `logger = logging.getLogger(__name__)` and use it —
+module should just do `logger = logging.getLogger(__name__)` and use it --
 no module should configure its own handlers.
 """
 import logging

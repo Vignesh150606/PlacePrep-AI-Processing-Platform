@@ -1,5 +1,5 @@
 -- =============================================================================
--- PlacePrep — Sprint 3: Identity Platform + Database + PDF Library
+-- PlacePrep -- Sprint 3: Identity Platform + Database + PDF Library
 -- Run this in the Supabase SQL Editor (Project -> SQL Editor -> New query).
 -- Safe to re-run: every statement is idempotent (IF NOT EXISTS / OR REPLACE).
 -- RLS policies and storage buckets are a SEPARATE migration (0002).

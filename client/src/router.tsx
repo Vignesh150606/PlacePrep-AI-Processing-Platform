@@ -5,6 +5,7 @@ import {
   redirect,
   Navigate,
 } from "@tanstack/react-router";
+import { z } from "zod";
 import type { AuthContextValue } from "@/providers/auth-context";
 import { AppLayout } from "@/components/layout/app-layout";
 import { LoginPage } from "@/pages/login-page";
@@ -18,6 +19,7 @@ import { WrongAnswersPage } from "@/pages/wrong-answers-page";
 import { BookmarksPage } from "@/pages/bookmarks-page";
 import { AnalyticsPage } from "@/pages/analytics-page";
 import { AdminReviewPage } from "@/pages/admin-review-page";
+import { NotificationsPage } from "@/pages/notifications-page";
 import { ComingSoonPage } from "@/pages/coming-soon";
 
 export interface RouterContext {
@@ -60,10 +62,19 @@ const questionsRoute = createRoute({
   component: QuestionBankPage,
 });
 
-const quizRoute = createRoute({
+// MODIFIED (Sprint 1A): now validates an optional `mode` search param so
+// Bookmarks' "Practice bookmarks" and Wrong Answers' "Retry all" can land
+// directly in the right quiz mode instead of the generic form defaulting
+// to "mixed" (see quiz-config-form.tsx's `defaultMode` prop).
+const quizSearchSchema = z.object({
+  mode: z.enum(["topic", "company", "mixed", "random", "wrong-answers", "bookmarks"]).optional(),
+});
+
+export const quizRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/quiz",
   component: QuizPage,
+  validateSearch: quizSearchSchema,
 });
 
 const companiesRoute = createRoute({
@@ -134,10 +145,13 @@ const adminReviewRoute = createRoute({
   component: AdminReviewPage,
 });
 
+// MODIFIED (Sprint 1A): was a ComingSoonPage stub — now the real
+// Notifications page. Follows the same conversion pattern as Bookmarks
+// (Module 5) and Wrong Answers (Module 4) above.
 const notificationsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/notifications",
-  component: () => <ComingSoonPage title="Notifications" />,
+  component: NotificationsPage,
 });
 
 const settingsRoute = createRoute({

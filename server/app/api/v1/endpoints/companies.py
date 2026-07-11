@@ -1,11 +1,9 @@
 """
-Company Directory endpoints — read-only list/detail.
+Company Directory endpoints -- read-only list/detail.
 
 Companies are upserted automatically by the classification step during PDF
-extraction (see app/services/classification.py) — there's no create/update
+extraction (see app/services/classification.py) -- there's no create/update
 endpoint here, since admin-managed company profiles are a later feature.
-This router just exposes what's already really in the `companies` table
-instead of the frontend hardcoding `mocks/companies.ts`.
 """
 from typing import Any, Dict, List, Optional
 
@@ -43,9 +41,6 @@ class CompanyListResponse(CamelModel):
 
 
 def _question_counts_by_company() -> Dict[str, int]:
-    """`companies.question_count` is a denormalized column nothing writes
-    to yet, so we compute it live from the junction table rather than
-    display a column that's always 0."""
     rows = get_supabase_admin().table("question_companies").select("company_id").execute().data or []
     counts: Dict[str, int] = {}
     for row in rows:

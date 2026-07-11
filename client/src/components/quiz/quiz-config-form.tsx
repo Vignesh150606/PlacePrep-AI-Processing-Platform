@@ -23,6 +23,13 @@ export type QuizConfig = z.infer<typeof quizConfigSchema>;
 
 interface QuizConfigFormProps {
   onStart: (config: QuizConfig) => void;
+  /**
+   * NEW (Sprint 1A): pre-selects a mode when arriving from a specific CTA
+   * (Bookmarks' "Practice bookmarks", Wrong Answers' "Retry all") instead of
+   * always defaulting to "mixed". Falls back to "mixed" when omitted, same
+   * as before.
+   */
+  defaultMode?: QuizConfig["mode"];
 }
 
 // The question-count picker offers up to 20 to match the schema's own max —
@@ -35,7 +42,7 @@ const TIME_LIMIT_OPTIONS: { label: string; value: number | null }[] = [
   { label: "20 min", value: 20 },
 ];
 
-export function QuizConfigForm({ onStart }: QuizConfigFormProps) {
+export function QuizConfigForm({ onStart, defaultMode }: QuizConfigFormProps) {
   const { data: companyData } = useCompanies();
   const { data: questionData } = useQuestions();
   const { data: wrongAnswerData } = useWrongAnswers();
@@ -51,7 +58,7 @@ export function QuizConfigForm({ onStart }: QuizConfigFormProps) {
 
   const { control, handleSubmit, watch } = useForm<QuizConfig>({
     resolver: zodResolver(quizConfigSchema),
-    defaultValues: { mode: "mixed", questionCount: 5, timeLimitMinutes: null },
+    defaultValues: { mode: defaultMode ?? "mixed", questionCount: 5, timeLimitMinutes: null },
   });
 
   const mode = watch("mode");

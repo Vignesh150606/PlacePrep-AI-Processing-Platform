@@ -81,7 +81,10 @@ export function BookmarksPage() {
           )}
           {visible.length > 0 && (
             <Button asChild size="sm">
-              <Link to="/quiz">
+              {/* FIX (Sprint 1A): was Link to="/quiz" with no mode, so the
+                  config form always defaulted to "mixed" — now lands
+                  directly in the Bookmarks quiz mode. */}
+              <Link to="/quiz" search={{ mode: "bookmarks" }}>
                 <Sparkles className="size-3.5" />
                 Practice bookmarks
               </Link>
