@@ -51,7 +51,14 @@ export function RecentPdfsCard() {
           <EmptyState icon={FileText} title="No PDFs uploaded yet" className="border-none py-6" />
         ) : (
           recent.map((pdf) => {
-            const status = STATUS_CONFIG[pdf.processingStatus];
+            // Same defensive fallback as pdf-library-page.tsx's StatusPill
+            // — see that comment for why this can legitimately happen
+            // (Render/Vercel deploy skew), not just theoretical.
+            const status = STATUS_CONFIG[pdf.processingStatus] ?? {
+              icon: FileText,
+              className: "text-muted-foreground",
+              label: pdf.processingStatus,
+            };
             const StatusIcon = status.icon;
             return (
               <Link

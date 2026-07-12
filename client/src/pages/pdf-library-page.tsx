@@ -61,7 +61,12 @@ const STATUS_CONFIG: Record<PdfProcessingStatus, { icon: typeof FileText; classN
 // already have been fixed. See PROJECT_STATE.md for the honest note on this
 // rather than a fabricated "fix" to code that already looks correct.
 function StatusPill({ status }: { status: PdfProcessingStatus }) {
-  const config = STATUS_CONFIG[status];
+  // Defensive fallback: the backend and frontend deploy separately (Render
+  // vs. Vercel), so there's a real window where the backend already
+  // returns a status value this bundle's STATUS_CONFIG doesn't know about
+  // yet (or vice versa). Falling back to a generic pill instead of
+  // crashing the page turns a hard error into a cosmetic one.
+  const config = STATUS_CONFIG[status] ?? { icon: FileText, className: "text-muted-foreground", label: status };
   const Icon = config.icon;
   return (
     <span className={cn("inline-flex items-center gap-1 text-xs font-medium", config.className)}>
