@@ -1,27 +1,293 @@
 # PlacePrep Project State
 
-Last updated: 2026-07-11 (Sprint 1A frontend integration pass)
+Last updated: 2026-07-12 (Phase 9 -- Interview Experience Repository)
 
 ## This pass, in one paragraph
 
-A second, independent frontend session ("Sprint 1A" -- command palette,
-Notifications page, mobile quiz-palette bottom sheet, `useDialogA11y`
-shared hook) arrived as a separate 13-file `client/`-only branch and was
-integrated into this repository. Three files (`mobile-nav.tsx`,
-`quiz-runner.tsx`, `index.css`) had a real overlap with the earlier
-Part 1 UI/UX pass below and were hand-merged rather than either version
-being taken wholesale -- both sessions' work is fully preserved with
-nothing silently dropped. Full detail, including exactly what was
-hand-merged and why, is in `MERGE_NOTES.md`'s "Part 3" section.
-`shared/` and `server/` were not touched by this pass; everything below
-about Phase 6 and prior passes is unchanged and still accurate.
+Phase 9 of the phased plan (see Phase 7's entry below for how this
+plan came about): the Interview Experience Repository. Like Phase 8,
+this had partial scaffolding worth checking for before writing anything
+new -- `shared/src/types/interview-experience.ts` already had a
+carefully-designed shape (rounds as structured sub-objects, anonymity,
+outcome, difficulty) and `bookmarks.target_type`'s check constraint
+already listed `'interview-experience'` as valid, both since Sprint 3 --
+but there was zero backing database table (confirmed by grep across
+every migration). This is a ground-up build on top of that existing
+type design, not a fix.
 
-**Correction to a prior entry:** the "Milestones" section below has long
-marked "Notifications" as done, which was true only for the `TopNav`
-bell-icon dropdown (`notification-center.tsx`) -- the standalone
-`/notifications` page this implies existed did not; it 404'd to
-`ComingSoonPage` until this pass added the real page. Noted here rather
-than quietly rewriting the historical milestone entry.
+## Phase 9 detail
+
+**Schema** (migration `0009`, four new tables): `interview_experiences`
+(the submission), `interview_experience_rounds` (structured round-by-round
+breakdown, one row per round), `interview_experience_votes` (Helpful/Not
+Helpful, one row per user per experience, toggle semantics), and
+`interview_experience_reports` (Report Experience, one per user per
+experience). RLS on all four, matching the API layer's own visibility
+rules rather than looser (approved-or-own-or-admin for select; admin-only
+for status/edit/delete; own-row-only for votes/reports).
+
+**Deliberate reuse instead of a parallel system:** "Bookmarks" uses the
+*existing* generic `bookmarks` table (`target_type: 'interview-experience'`)
+-- there's no bookmark endpoint in the new `interview_experiences.py` file
+at all; `bookmarks.py` (built in Module 5) already handles it, and the
+frontend's existing `useBookmarks()` hook needed zero changes to support
+this content type.
+
+**Field consolidation, done deliberately and stated here rather than
+silently:** the brief listed several near-duplicate free-text fields
+("Preparation Tips" / "Overall Advice" -> just `overallTips`, already
+in the pre-existing type; "Aptitude Topics" / "Important Concepts" ->
+one `keyTopics: string[]` tag list; "Questions Asked" / "Coding
+Questions" / "Technical Questions" -> folded into each round's own
+`description`, which is what a per-round description is for). Adding
+three more overlapping text fields on top of `overallTips`/`keyTopics`/
+rounds would have made the submission form worse, not more complete.
+
+**Anonymity, implemented as real accountability rather than a fake
+toggle:** `author_id` is always stored on the row. The API redacts it to
+`null` in every response for an `is_anonymous` submission *unless* the
+requester is the author or an admin -- verified directly (`_row_to_response`
+tested against a stranger, the owner, and an admin viewing the same
+anonymous row: stranger and non-owner get `null`, owner and admin see the
+real id). This is deliberately different from "nobody can ever know who
+posted this," which would make abuse/moderation impossible.
+
+**Backend** (`server/app/api/v1/endpoints/interview_experiences.py`, new,
+8 routes): list (with company/role/difficulty/year/department/round-type/
+package-range filters, plus a `status` filter for admins working the
+moderation queue), get one, create (any authenticated user, always starts
+`pending-review`), admin status update (approve/reject with reason),
+admin edit (including wholesale round-list replacement and `is_pinned`),
+admin delete, vote (toggle, counts always computed fresh from the votes
+table rather than a denormalized counter -- no drift to worry about), and
+report. Verified: full backend import, `app.main` boots with all 8 routes
+correctly wired, `ruff check` clean across the whole `app/` tree, and a
+direct functional test of the anonymity redaction logic against three
+different viewers of the same row (above) plus the create-request
+validation.
+
+**Explicitly NOT implemented, with the actual reasoning (not just a
+checklist gap):** admin "Merge" for interview experiences. `questions.py`'s
+merge has one clear, mechanical, structural target: re-pointing
+`quiz_attempts`/`bookmarks`/`wrong_answer_marks` between two rows of
+identical shape. A real interview-experience merge would need editorial
+judgment about which rounds, tips, and author to keep across two
+free-form personal accounts -- that's a distinct, later feature, not a
+find-and-replace of the question version, and attempting a rushed copy
+here risked shipping something worse than not having it at all.
+
+**Frontend:**
+  - `hooks/use-interview-experiences.ts` (new) -- list (with filters),
+    detail, create, admin status/edit/delete, vote, report.
+  - `pages/interview-experiences-page.tsx` (new) -- filterable list,
+    expandable cards (round breakdown, tips, key topics, resources,
+    notes), a submission form (react-hook-form + zod, dynamic round
+    list via `useFieldArray`, prefilled from the user's own profile
+    college/department/year), inline admin moderation (approve/reject
+    with reason/edit/pin/delete), and a real empty state.
+  - `company-detail-page.tsx`'s "Interview Experiences" tab -- previously
+    showed explicitly-labeled sample data matched by name against a demo
+    dataset (an honest placeholder, not fabricated data, but a
+    placeholder nonetheless) -- now calls the real API filtered to that
+    company and reuses the same `ExperienceCard`/`SubmissionDialog`
+    components from the main page (exported for reuse rather than
+    duplicated).
+  - `router.tsx`'s `/experiences` route now renders the real page instead
+    of `<ComingSoonPage title="Interview Experiences">`.
+  - Deleted `mocks/interview-experiences.ts` and `mocks/companies.ts` --
+    confirmed (grepped) every remaining reference to either was a code
+    comment, not an import, before removing them.
+  - Verified: `pnpm --filter client typecheck`, `lint` (oxlint, 0 errors),
+    and `build` all clean.
+
+
+## Phase 8 detail
+
+**Schema** (migration `0008`): extended `calendar_events` with `role`,
+`package_lpa`, `eligibility`, `registration_deadline`, `venue`,
+`is_online`, `application_link`, `attachment_url`, and `status`
+(`upcoming`/`ongoing`/`completed`/`cancelled`, default `upcoming`), plus
+`updated_at` with a trigger reusing the existing `set_updated_at()`
+function. No RLS changes needed -- the Sprint 3 policies already matched
+the brief's access model exactly.
+
+**Scoping note, stated honestly:** the brief asks for "Admins and
+Placement Coordinators" to have write access. There is no "Placement
+Coordinator" role in this system (`roles` only has student/alumni/admin)
+-- adding a fourth role is a bigger identity-platform change than this
+pass, so admin-only write access is what's actually implemented (which is
+also all the existing RLS policy enforces). Noted here rather than
+silently treating "admin" as a stand-in without saying so.
+
+**Backend** (`server/app/api/v1/endpoints/calendar.py`, new):
+  - `GET /calendar` -- open to any authenticated user; filters by
+    `company_id`, `status`, and `month` (`YYYY-MM`).
+  - `POST /calendar`, `PATCH /calendar/{id}`, `DELETE /calendar/{id}` --
+    all admin-only (`require_admin`). Reschedule and cancel are both just
+    the same `PATCH` (reschedule = new `startAt`/`endAt`, cancel =
+    `{"status": "cancelled"}`) rather than separate endpoints, since a
+    partial update already covers both.
+  - Verified: full backend import, `app.main` boots with all 4 new routes
+    correctly wired, `ruff check` clean, and a direct functional test of
+    the Pydantic request/response models -- confirmed camelCase JSON in
+    (`packageLpa`, `registrationDeadline`, etc.) validates and converts to
+    snake_case for the DB insert, invalid `type`/`status` enum values are
+    correctly rejected, `exclude_unset` partial-update semantics work for
+    the cancel-via-status-only case, and DB rows convert back to camelCase
+    for the frontend correctly.
+
+**Frontend:**
+  - `hooks/use-calendar.ts` (new) -- `usePlacementEvents` (with
+    company/status/month filters), `useCreatePlacementEvent`,
+    `useUpdatePlacementEvent`, `useDeletePlacementEvent`.
+  - `pages/placement-calendar-page.tsx` (new) -- all three requested view
+    modes (List grouped by upcoming/past, Calendar as a real month grid
+    with day-click-through, Timeline grouped by month), an admin
+    create/edit dialog (react-hook-form + zod, matching the existing
+    `quiz-config-form.tsx` convention) covering every field the brief
+    asked for, and a real empty state when no events exist yet
+    (distinct copy for admins vs. students).
+  - `router.tsx`'s `/calendar` route now renders the real page instead of
+    `<ComingSoonPage title="Placement Calendar">`.
+  - Deleted `mocks/calendar-events.ts` -- confirmed (grepped) nothing
+    else referenced it once the real page shipped, so this is an actual
+    verified removal, not an assumed-safe one.
+  - Verified: `pnpm --filter client typecheck`, `lint` (oxlint, 0
+    errors), and `build` all clean.
+
+**Explicitly not done in this pass:** a fourth "Placement Coordinator"
+role (see scoping note above), a background job to auto-transition
+`status` from `upcoming` -> `ongoing` -> `completed` as dates pass (it's a
+plain column an admin sets manually via the status field in the edit
+dialog for now), multi-file attachments (one `attachment_url` field, not
+a subsystem), and any notification fan-out on event create/update -- the
+brief listed "future notification support" as explicitly future, so it
+wasn't built now; `notifications.notify_admins()` from Phase 7 shows the
+plumbing is there if/when this is prioritized.
+
+
+## Phase 7 detail
+
+**Critical Issue 1, root-caused (not guessed) to four separate confirmed
+bugs, all fixed:**
+
+1. `services/answer_key.py` rejected the *entire* answer-key section
+   outright once it exceeded a fixed 6,000-character budget -- a real
+   solutions section for 40+ questions routinely exceeds that, so every
+   chunk sent to Gemini had zero answer-key context. Replaced the
+   length-based cutoff with a shape-based check (does the candidate text
+   actually contain a plausible density of "12. B"-style entries?) with a
+   much larger sanity ceiling (40,000 chars) instead of a real gate.
+   Verified against a large synthetic key, a false-header-in-prose case,
+   a grid-style key, and a no-key case -- all four behave correctly.
+2. `services/pdf_text.py`'s OCR trigger averaged `chars_per_page` across
+   the WHOLE document -- a document with dense native-text question pages
+   and a few scanned/photographed solution pages averages out fine, so
+   OCR never ran on those specific pages and their content silently
+   vanished (empty-text pages are dropped from `full_text` with no
+   trace). Added a per-page low-quality signal
+   (`ExtractionResult.low_quality_page_numbers`) and a new
+   `services/ocr.py:ocr_pdf_pages()` that OCRs *just* those pages and
+   splices the result back into the correct position
+   (`services/pipeline.py:_extract_document_text`), instead of an
+   all-or-nothing whole-document decision.
+3. `services/pipeline.py`'s main extraction loop caught `AIProviderError`
+   per chunk and silently `continue`d -- if every chunk's Gemini call
+   failed (bad key, quota, safety-filtered content, deprecated model,
+   non-JSON output surviving the retry), the job still finished as
+   `completed` with 0 questions and a misleading "no questions were
+   found" message, with the real cause visible only in server logs. Now
+   tracks `failed_chunk_count` separately, raises a real failure when
+   *all* chunks fail (surfacing the actual underlying error into the
+   Failed/Retry queue), and reports partial chunk failures in the
+   completion notification instead of staying silent about them.
+4. Found *while verifying fix #2*, not assumed upfront:
+   `services/ocr.py`'s `image_to_string()` calls all used Tesseract's
+   default page-segmentation mode (PSM 3, "fully automatic"), which is
+   tuned for multi-region newspaper-style layouts. On a page that's
+   mostly a short numbered list -- an answer key almost exactly --
+   PSM 3 badly garbles the text (verified: a real test page came out as
+   `"CON AnRWNe\nDBrunmwraoednwa..."`). `--psm 6` ("assume a single
+   uniform block of text") fixed this completely in the same test while
+   performing identically well on ordinary dense paragraph-style scanned
+   question text (verified against both shapes before applying it
+   everywhere OCR runs). This was the fix that made the end-to-end test
+   below actually pass.
+
+**End-to-end verification, not just unit-level:** built two synthetic
+mixed PDFs (reportlab-generated native-text question pages + a
+Pillow-rendered scanned answer-key page baked into an image, one with a
+deliberately low-quality bitmap font, one with a realistic
+truetype-rendered scan) and ran them through the real
+`_extract_document_text` -> `split_answer_key` chain with actual
+Tesseract/poppler (both installed and available in this environment). The
+realistic-quality synthetic scan round-trips correctly end to end: mixed
+page detected despite a healthy whole-document average, targeted OCR
+recovers clean answer-key text, and it's correctly detected and split out
+for the AI prompt -- while question content from the native-text pages is
+preserved. The deliberately-low-quality bitmap-font scan still doesn't
+fully recover, which is an honest limit of OCR on genuinely poor source
+images, not something a segmentation-mode or prompt change can fix.
+
+**Upload approval workflow** (the other confirmed gap -- `upload_pdf`
+previously queued the Gemini pipeline immediately on any authenticated
+upload with no human review):
+  - New `pdf_resources` states: `pending-approval` (default on upload,
+    replacing the immediate `queued`) and `rejected`, plus
+    `reviewed_by`/`reviewed_at`/`rejection_reason` columns
+    (migration `0007`).
+  - `POST /pdfs/{id}/approve` (admin-only) is now the *only* path that
+    creates a processing job and starts extraction. `POST
+    /pdfs/{id}/reject` (admin-only, requires a reason) marks it rejected
+    and notifies the uploader. Both are new; `upload_pdf` itself no
+    longer touches `pipeline.create_job`/`run_pipeline` at all.
+  - `notify_admins()` added to `services/notifications.py` (broadcasts to
+    every `role_id = 3` profile) so admins get notified when something
+    needs review, rather than having to poll the library.
+  - `GET /pdfs` gained an optional `status` filter so the admin UI can
+    query the pending-approval queue directly.
+  - Frontend: a new "Pending Approval" tab (now the default tab for
+    admins in the PDF Library) with Approve / Reject-with-reason actions,
+    new `useApprovePdf`/`useRejectPdf` hooks, updated upload
+    copy/messaging, and status-pill config for the two new statuses in
+    both `pdf-library-page.tsx` and `recent-pdfs-card.tsx` (the latter
+    was only caught by actually running `tsc -b` -- it has its own
+    parallel status-config record that the type-checker correctly flagged
+    as no longer exhaustive once `PdfProcessingStatus` gained members).
+
+**Also fixed while in this code, using a previously-vestigial setting for
+real:** `MAX_EXTRACTION_ATTEMPTS` existed in `config.py` but was never
+actually checked anywhere -- every manual retry created a fresh
+`processing_jobs` row with no ceiling. `retry_pdf` now counts prior
+attempts for the PDF and refuses further retries past the configured max,
+directing the uploader/admin to a direct admin review instead.
+
+**Verification performed (all real, all reproduced in this pass, not
+assumed):**
+  - `answer_key.py` unit-level behavior against 4 constructed cases (see
+    above).
+  - Full backend import of every touched module plus `app.main` booting
+    the FastAPI app with dummy env vars, confirming all new/changed
+    routes (`/pdfs/{id}/approve`, `/pdfs/{id}/reject`, updated
+    `/pdfs/{id}/retry`, updated `GET /pdfs`) are wired correctly.
+  - `ruff check` clean on every touched Python file.
+  - `pnpm --filter @placeprep/shared typecheck`,
+    `pnpm --filter client typecheck`, `pnpm --filter client build`, and
+    `pnpm --filter client lint` (oxlint) all clean -- the client build
+    genuinely compiles and bundles with the new tab/dialog/hooks.
+  - The two-PDF synthetic mixed-document end-to-end test described above,
+    using the real Tesseract/poppler binaries actually installed in this
+    environment (not mocked).
+
+**Explicitly not done in this pass** (out of Phase 7's stated scope, not
+overlooked): the full Admin Portal expansion (user management, a
+dedicated retry/duplicate-queue UI beyond what already existed), an
+automated test suite covering this (or any) pipeline logic, and
+cross-document linking for the case where a question paper and its
+solutions are genuinely two *separate* uploads rather than one PDF with
+mixed pages -- that would need a real "link to companion document"
+concept in the schema and admin UI, which is a bigger, separate feature
+than a bug fix and wasn't attempted here.
 
 ## Process note on the earlier pass (read this first)
 

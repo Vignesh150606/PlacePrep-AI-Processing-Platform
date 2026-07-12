@@ -27,7 +27,7 @@ history in PROJECT_STATE.md.
 """
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import get_settings
 from app.core.supabase_client import get_supabase_admin
@@ -100,9 +100,14 @@ async def _extract_document_text(pdf_row: Dict[str, Any], file_bytes: bytes) -> 
     embedded text layer to try first, so OCR isn't a *fallback* there, it's
     the only path (`image_text.extract_text_from_image`, itself just a
     thin wrapper over the same `ocr.py` Tesseract engine a scanned PDF
-    already uses). A real PDF keeps the original Sprint 4 behavior: try
-    native text extraction first, fall back to OCR only if that text looks
-    too sparse to be real content.
+    already uses). A real PDF does the original Sprint 4 fallback (native
+    text first, whole-document OCR if the whole thing looks sparse) PLUS a
+    Phase 7 addition: if the document looks fine ON AVERAGE but a minority
+    of individual pages don't (the actual "Mixed PDF" case -- e.g.
+    photographed/scanned solution pages mixed into an otherwise text-based
+    question paper), OCR just those specific pages and splice the result
+    back in, instead of silently losing that content (see pdf_text.py's
+    `low_quality_page_numbers` and ocr.py's `ocr_pdf_pages`).
     """
     settings = get_settings()
     file_kind = pdf_row.get("file_kind", "pdf")
@@ -116,7 +121,42 @@ async def _extract_document_text(pdf_row: Dict[str, Any], file_bytes: bytes) -> 
     result = extract_text_with_quality(file_bytes)
 
     if not result.is_low_quality() and result.full_text.strip():
-        return result.full_text, False, result.page_count
+        low_quality_pages = result.low_quality_page_numbers
+        if not low_quality_pages:
+            return result.full_text, False, result.page_count
+
+        # PHASE 7 FIX: the document averages out fine, but these specific
+        # pages don't -- the whole-document check above would have missed
+        # this entirely and silently dropped their content.
+        if not settings.OCR_ENABLED or not ocr.is_available():
+            logger.warning(
+                "PDF '%s' has %d low-text page(s) %s that would normally be OCR'd as a mixed "
+                "document, but OCR is unavailable; proceeding with only the natively-extracted "
+                "text (those pages' content may be missing or incomplete).",
+                pdf_row.get("file_name"),
+                len(low_quality_pages),
+                low_quality_pages,
+            )
+            return result.full_text, False, result.page_count
+
+        logger.info(
+            "PDF '%s' looks fine on average (%.1f chars/page) but has %d low-text page(s) %s -- "
+            "OCR'ing just those pages instead of the whole document.",
+            pdf_row.get("file_name"),
+            result.chars_per_page,
+            len(low_quality_pages),
+            low_quality_pages,
+        )
+        ocr_pages = ocr.ocr_pdf_pages(file_bytes, low_quality_pages)
+        if not ocr_pages:
+            # Couldn't recover anything extra from those pages -- proceed
+            # with what native extraction already got rather than failing
+            # a document that's mostly fine.
+            return result.full_text, False, result.page_count
+
+        merged_pages = [ocr_pages.get(p.page_number, p.text) for p in result.pages]
+        merged_text = "\n\n".join(t for t in merged_pages if t.strip())
+        return merged_text, True, result.page_count
 
     if not settings.OCR_ENABLED or not ocr.is_available():
         if result.full_text.strip():
@@ -177,6 +217,7 @@ async def run_pipeline(job_id: str) -> None:
     low_confidence_count = 0
     ocr_used = False
     chunk_count = 1
+    failed_chunk_count = 0
 
     try:
         bucket = settings.PDF_STORAGE_BUCKET
@@ -191,6 +232,7 @@ async def run_pipeline(job_id: str) -> None:
 
         all_extracted: List[ExtractedQuestion] = []
         seen_hashes_this_run: set[str] = set()
+        last_chunk_error: Optional[str] = None
 
         for chunk in chunks:
             try:
@@ -203,6 +245,8 @@ async def run_pipeline(job_id: str) -> None:
                     answer_key_text=split.key_text,
                 )
             except AIProviderError as exc:
+                failed_chunk_count += 1
+                last_chunk_error = str(exc)
                 logger.warning(
                     "Chunk %d/%d failed for '%s': %s", chunk.index + 1, chunk.total, pdf_row["file_name"], exc
                 )
@@ -216,12 +260,29 @@ async def run_pipeline(job_id: str) -> None:
                 seen_hashes_this_run.add(content_hash)
                 all_extracted.append(item)
 
+        # PHASE 7 FIX (Critical Issue 1): previously, if EVERY chunk's AI
+        # call failed (bad/rotated API key, quota exhausted, Gemini
+        # safety-filtering this content, a deprecated model name, non-JSON
+        # output surviving the one retry in gemini_provider.py), this was
+        # indistinguishable from "the document genuinely has no MCQs" -- the
+        # job still finished as `completed` with 0 questions and a
+        # misleading "no questions were found" message, hiding a real
+        # API-level failure in server logs only. Surface it as a real
+        # failure instead, with the actual error, so it lands in the
+        # Failed/Retry queue rather than looking like a content problem.
+        if chunk_count > 0 and failed_chunk_count == chunk_count:
+            raise AIProviderError(
+                f"AI extraction failed for all {chunk_count} portion(s) of this document: "
+                f"{last_chunk_error or 'unknown error'}"
+            )
+
         if not all_extracted and chunk_count > 0:
             logger.warning(
-                "Extraction produced zero questions for '%s' across %d chunk(s) -- "
-                "document may not contain MCQs, or every chunk call failed (see warnings above).",
+                "Extraction produced zero questions for '%s' across %d chunk(s) (%d of which failed) -- "
+                "document may not contain MCQs, or those chunks' AI calls failed (see warnings above).",
                 pdf_row["file_name"],
                 chunk_count,
+                failed_chunk_count,
             )
 
         for item in all_extracted:
@@ -304,6 +365,7 @@ async def run_pipeline(job_id: str) -> None:
             low_confidence_count=low_confidence_count,
             ocr_used=ocr_used,
             chunk_count=chunk_count,
+            failed_chunk_count=failed_chunk_count,
             settings=settings,
         )
 
@@ -317,6 +379,7 @@ async def run_pipeline(job_id: str) -> None:
             error=str(exc),
             ocr_used=ocr_used,
             chunk_count=chunk_count,
+            failed_chunk_count=failed_chunk_count,
         )
     except Exception as exc:  # noqa: BLE001 -- never let an unexpected error leave a job stuck in "running"
         logger.exception("Unexpected pipeline failure for job %s", job_id)
@@ -329,6 +392,7 @@ async def run_pipeline(job_id: str) -> None:
             error=f"Unexpected error: {exc}",
             ocr_used=ocr_used,
             chunk_count=chunk_count,
+            failed_chunk_count=failed_chunk_count,
         )
 
 
@@ -344,6 +408,7 @@ def _finish_success(
     low_confidence_count: int,
     ocr_used: bool,
     chunk_count: int,
+    failed_chunk_count: int,
     settings,
 ) -> None:
     admin.table("processing_jobs").update(
@@ -354,6 +419,7 @@ def _finish_success(
             "low_confidence_count": low_confidence_count,
             "ocr_used": ocr_used,
             "chunk_count": chunk_count,
+            "failed_chunk_count": failed_chunk_count,
             "completed_at": _now_iso(),
         }
     ).eq("id", job_id).execute()
@@ -381,7 +447,13 @@ def _finish_success(
         summary += f" {duplicate_count} duplicate(s) skipped."
     if low_confidence_count:
         summary += f" {low_confidence_count} flagged for review."
-    if inserted_count == 0:
+    if failed_chunk_count:
+        summary += (
+            f" Note: {failed_chunk_count} of {chunk_count} portion(s) of this document failed "
+            "during AI extraction and were skipped -- some questions may be missing. Check the "
+            "Processing Dashboard for details."
+        )
+    if inserted_count == 0 and not failed_chunk_count:
         summary += " No questions were found -- this file may not contain MCQs, or extraction quality was too low; check the Processing Dashboard for details."
 
     notifications.notify(
@@ -412,6 +484,7 @@ def _finish_failure(
     error: str,
     ocr_used: bool,
     chunk_count: int,
+    failed_chunk_count: int = 0,
 ) -> None:
     admin.table("processing_jobs").update(
         {
@@ -419,6 +492,7 @@ def _finish_failure(
             "error_message": error,
             "ocr_used": ocr_used,
             "chunk_count": chunk_count,
+            "failed_chunk_count": failed_chunk_count,
             "completed_at": _now_iso(),
         }
     ).eq("id", job_id).execute()

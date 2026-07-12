@@ -6,9 +6,11 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     bookmarks,
+    calendar,
     companies,
     daily_challenge,
     health,
+    interview_experiences,
     notifications,
     pdfs,
     processing,
@@ -30,3 +32,7 @@ api_router.include_router(quizzes.router, prefix="/quizzes", tags=["Quizzes"])
 api_router.include_router(bookmarks.router, prefix="/bookmarks", tags=["Bookmarks"])
 api_router.include_router(search.router, prefix="/search", tags=["Search"])
 api_router.include_router(daily_challenge.router, prefix="/daily-challenge", tags=["Daily Challenge"])
+api_router.include_router(calendar.router, prefix="/calendar", tags=["Placement Calendar"])
+api_router.include_router(
+    interview_experiences.router, prefix="/interview-experiences", tags=["Interview Experiences"]
+)

@@ -158,8 +158,15 @@ class GeminiProvider(AIProvider):
             else ""
         )
         page_line = f"Page-range hint for this portion: {page_offset_hint}\n" if page_offset_hint else ""
+        # PHASE 7 FIX: previously hard-truncated to 4,000 chars, which could
+        # silently cut off answers for later questions in a large document
+        # (e.g. only covering the first ~15 of 50 questions' answers).
+        # gemini-2.5-flash's context window makes a much larger budget
+        # trivial; 20,000 chars comfortably covers even large answer keys
+        # while still bounding worst-case prompt size. Matches the sanity
+        # ceiling `answer_key.py` uses when deciding what counts as a key.
         key_block = (
-            f"\nANSWER KEY (from elsewhere in the same document -- use this to determine correct options):\n\"\"\"\n{answer_key_text[:4000]}\n\"\"\"\n"
+            f"\nANSWER KEY (from elsewhere in the same document -- use this to determine correct options):\n\"\"\"\n{answer_key_text[:20_000]}\n\"\"\"\n"
             if answer_key_text
             else ""
         )

@@ -2,10 +2,12 @@ import { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
+  Clock,
   FileText,
   Loader2,
   RefreshCw,
   ScanText,
+  ShieldCheck,
   Upload,
   XCircle,
 } from "lucide-react";
@@ -21,19 +23,31 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatBytes, formatDateTime, formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/use-profile";
-import { usePdfs, useRetryPdf, useSetKeepPermanent, useUploadPdf } from "@/hooks/use-pdfs";
+import {
+  useApprovePdf,
+  usePdfs,
+  useRejectPdf,
+  useRetryPdf,
+  useSetKeepPermanent,
+  useUploadPdf,
+} from "@/hooks/use-pdfs";
 import { useProcessingDashboard, useProcessingJobs } from "@/hooks/use-processing";
 import { ApiError } from "@/lib/api-client";
 
 const STATUS_CONFIG: Record<PdfProcessingStatus, { icon: typeof FileText; className: string; label: string }> = {
   uploaded: { icon: FileText, className: "text-muted-foreground", label: "Uploaded" },
+  "pending-approval": { icon: Clock, className: "text-warning-500", label: "Pending Approval" },
   queued: { icon: Loader2, className: "text-warning-500", label: "Queued" },
   processing: { icon: Loader2, className: "text-accent-600 animate-spin", label: "Processing" },
   completed: { icon: CheckCircle2, className: "text-correct-600 dark:text-correct-500", label: "Completed" },
   failed: { icon: XCircle, className: "text-incorrect-600 dark:text-incorrect-500", label: "Failed" },
+  rejected: { icon: XCircle, className: "text-incorrect-600 dark:text-incorrect-500", label: "Rejected" },
 };
 
 // NOTE ON THE "processing text rotates with the spinner" UI BUG:
@@ -101,7 +115,7 @@ function UploadDropzone() {
       { file, title: file.name.replace(/\.pdf$/i, "") },
       {
         onSuccess: () => {
-          toast.success(`"${file.name}" uploaded — extraction queued.`);
+          toast.success(`"${file.name}" uploaded — waiting for admin approval.`);
           setJustSucceeded(true);
           window.setTimeout(() => setJustSucceeded(false), 1800);
         },
@@ -169,12 +183,13 @@ function UploadDropzone() {
             {state === "uploading"
               ? `Uploading ${fileName ?? "file"}…`
               : state === "success"
-                ? "Uploaded — extraction queued"
+                ? "Uploaded — waiting for approval"
                 : "Drop a PDF here, or click to browse"}
           </p>
           <p className="text-xs text-muted-foreground">
-            PDF only, up to {formatBytes(PDF_UPLOAD_CONSTRAINTS.maxSizeBytes)}. Extraction starts automatically —
-            scanned pages are OCR'd automatically if needed, and large PDFs are split into chunks.
+            PDF only, up to {formatBytes(PDF_UPLOAD_CONSTRAINTS.maxSizeBytes)}. An admin reviews every upload before
+            AI extraction runs — scanned pages are OCR'd automatically once approved, and large PDFs are split
+            into chunks.
           </p>
         </div>
 
@@ -419,6 +434,162 @@ function ProcessingDashboardTab() {
   );
 }
 
+/**
+ * PHASE 7: admin queue for uploads awaiting approval before AI extraction
+ * can run (see server/app/api/v1/endpoints/pdfs.py's module docstring for
+ * why this gate exists). Approve kicks off extraction immediately; reject
+ * requires a short reason so the uploader knows why.
+ */
+function RejectDialog({
+  pdfId,
+  fileName,
+  open,
+  onOpenChange,
+}: {
+  pdfId: string;
+  fileName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const reject = useRejectPdf();
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Reject upload</DialogTitle>
+          <DialogDescription className="truncate">{fileName}</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="reject-reason">Reason (shown to the uploader)</Label>
+          <Input
+            id="reject-reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Duplicate of an existing upload"
+            autoFocus
+          />
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <DialogClose asChild>
+            <Button variant="ghost" size="sm">
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={!reason.trim() || reject.isPending}
+            onClick={() =>
+              reject.mutate(
+                { pdfId, reason: reason.trim() },
+                {
+                  onSuccess: () => {
+                    toast.success("Upload rejected.");
+                    onOpenChange(false);
+                  },
+                  onError: (err) => toast.error(err instanceof ApiError ? err.message : "Reject failed."),
+                },
+              )
+            }
+          >
+            Reject
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PendingApprovalTab() {
+  const { data, isLoading, isError, refetch } = usePdfs("pending-approval");
+  const approve = useApprovePdf();
+  const [rejectTarget, setRejectTarget] = useState<{ id: string; fileName: string } | null>(null);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-2">
+        {[...Array(3)].map((_, i) => (
+          <Skeleton key={i} className="h-14 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return <ErrorState description="We couldn't load pending uploads." onRetry={() => refetch()} />;
+  }
+
+  if (!data || data.items.length === 0) {
+    return (
+      <EmptyState
+        icon={ShieldCheck}
+        title="Nothing waiting for approval"
+        description="New student uploads will show up here before AI extraction runs."
+      />
+    );
+  }
+
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>File</TableHead>
+            <TableHead>Size</TableHead>
+            <TableHead>Uploaded</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.items.map((pdf) => (
+            <TableRow key={pdf.id}>
+              <TableCell className="max-w-xs truncate font-medium">{pdf.title || pdf.fileName}</TableCell>
+              <TableCell className="text-muted-foreground">{formatBytes(pdf.fileSizeBytes)}</TableCell>
+              <TableCell className="text-muted-foreground" title={formatDateTime(pdf.uploadedAt)}>
+                {formatRelativeTime(pdf.uploadedAt)}
+              </TableCell>
+              <TableCell>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRejectTarget({ id: pdf.id, fileName: pdf.title || pdf.fileName })}
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={approve.isPending}
+                    onClick={() =>
+                      approve.mutate(pdf.id, {
+                        onSuccess: () => toast.success("Approved — extraction started."),
+                        onError: (err) => toast.error(err instanceof ApiError ? err.message : "Approve failed."),
+                      })
+                    }
+                  >
+                    <ShieldCheck className="size-3.5" /> Approve
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      {rejectTarget && (
+        <RejectDialog
+          pdfId={rejectTarget.id}
+          fileName={rejectTarget.fileName}
+          open={!!rejectTarget}
+          onOpenChange={(open) => !open && setRejectTarget(null)}
+        />
+      )}
+    </>
+  );
+}
+
 export function PdfLibraryPage() {
   const isAdmin = useIsAdmin();
 
@@ -427,17 +598,21 @@ export function PdfLibraryPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-foreground">PDF Library</h1>
         <p className="text-sm text-muted-foreground">
-          Upload placement question papers — Gemini extracts, validates, and adds them to the Question Bank
-          automatically.
+          Upload placement question papers — an admin approves each one, then Gemini extracts, validates, and
+          adds questions to the Question Bank automatically.
         </p>
       </div>
 
       {isAdmin ? (
-        <Tabs defaultValue="library">
+        <Tabs defaultValue="pending-approval">
           <TabsList>
+            <TabsTrigger value="pending-approval">Pending Approval</TabsTrigger>
             <TabsTrigger value="library">Library</TabsTrigger>
             <TabsTrigger value="dashboard">Processing Dashboard</TabsTrigger>
           </TabsList>
+          <TabsContent value="pending-approval">
+            <PendingApprovalTab />
+          </TabsContent>
           <TabsContent value="library">
             <PdfLibraryTab />
           </TabsContent>

@@ -21,6 +21,20 @@ PHASE 6 CHANGES:
     FUNCTIONAL_RECOMMENDATIONS.md item #2 from the UI/UX pass; this is the
     backend half, the frontend switch-over is intentionally left to
     whichever session owns `client/`, same boundary as before).
+
+PHASE 7 CHANGES -- upload approval workflow: `upload_pdf` no longer queues
+the AI pipeline immediately. A fresh upload now lands in `pending-approval`
+and does nothing further until an admin calls the new `approve_pdf` (which
+is what actually creates the processing job and kicks off the background
+task) or `reject_pdf`. This was a genuine gap, not a stylistic preference:
+the previous flow meant any authenticated student upload -- including
+duplicates, junk, or abuse -- consumed a real Gemini API call before a
+human ever looked at it. `list_pdfs` also gained an optional `status`
+filter so the admin UI can query the pending-approval queue directly
+instead of filtering a full page client-side. `retry_pdf` now also
+enforces `MAX_EXTRACTION_ATTEMPTS` for real (previously stored in config
+but never actually checked anywhere -- every manual retry created a fresh
+job with no ceiling).
 """
 import asyncio
 import json
@@ -40,11 +54,20 @@ from app.core.rate_limit import upload_limit
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
-from app.services import pipeline
+from app.services import notifications, pipeline
 
 router = APIRouter()
 
-_TERMINAL_STATUSES = {"completed", "failed"}
+_TERMINAL_STATUSES = {"completed", "failed", "rejected"}
+_VALID_LIST_STATUSES = {
+    "uploaded",
+    "pending-approval",
+    "queued",
+    "processing",
+    "completed",
+    "failed",
+    "rejected",
+}
 # Safety valve on the SSE endpoint -- a job that's still "processing" after
 # this long almost certainly means the background task died without
 # updating status (or the deploy restarted mid-job); stop streaming rather
@@ -70,6 +93,10 @@ class PdfResourceResponse(CamelModel):
     error_message: Optional[str]
     uploaded_at: str
     processed_at: Optional[str]
+    # Phase 7 -- upload approval workflow.
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[str] = None
+    rejection_reason: Optional[str] = None
 
 
 class PdfResourceListResponse(CamelModel):
@@ -83,11 +110,22 @@ class KeepPermanentUpdateRequest(CamelModel):
     keep_permanent: bool = Field(...)
 
 
+class RejectPdfRequest(CamelModel):
+    reason: str = Field(..., min_length=1, max_length=1000)
+
+
 def _row_to_response(row: Dict[str, Any]) -> PdfResourceResponse:
     # `file_kind` is new (migration 0006); default any pre-migration row
     # that predates the column to "pdf" so this response model never 500s
-    # on old data.
-    row = {**row, "file_kind": row.get("file_kind") or "pdf"}
+    # on old data. Same idea for the Phase 7 approval columns, which are
+    # `None` for any row that predates migration 0007.
+    row = {
+        **row,
+        "file_kind": row.get("file_kind") or "pdf",
+        "reviewed_by": row.get("reviewed_by"),
+        "reviewed_at": row.get("reviewed_at"),
+        "rejection_reason": row.get("rejection_reason"),
+    }
     return PdfResourceResponse(**row)
 
 
@@ -96,21 +134,25 @@ async def list_pdfs(
     current_user: CurrentUser = Depends(get_current_user),
     page: int = 1,
     page_size: int = 50,
+    status: Optional[str] = None,
 ):
     page = max(1, page)
     page_size = max(1, min(page_size, 200))
     start = (page - 1) * page_size
     end = start + page_size - 1
 
+    if status is not None and status not in _VALID_LIST_STATUSES:
+        raise AppException(f"Invalid status filter: {status}", status_code=422)
+
     admin = get_supabase_admin()
-    count_result = admin.table("pdf_resources").select("id", count="exact").execute()
-    result = (
-        admin.table("pdf_resources")
-        .select("*")
-        .order("uploaded_at", desc=True)
-        .range(start, end)
-        .execute()
-    )
+    count_query = admin.table("pdf_resources").select("id", count="exact")
+    list_query = admin.table("pdf_resources").select("*").order("uploaded_at", desc=True).range(start, end)
+    if status is not None:
+        count_query = count_query.eq("processing_status", status)
+        list_query = list_query.eq("processing_status", status)
+
+    count_result = count_query.execute()
+    result = list_query.execute()
     items = [_row_to_response(r) for r in result.data or []]
     return ok(
         data=PdfResourceListResponse(items=items, total=count_result.count or 0, page=page, page_size=page_size),
@@ -171,18 +213,25 @@ async def upload_pdf(
                 "company_id": company_id or None,
                 "subject_id": subject_id or None,
                 "topic_id": topic_id or None,
-                "processing_status": "uploaded",
+                # Phase 7: uploads no longer trigger AI extraction directly.
+                # An admin must approve first (see `approve_pdf` below) --
+                # students should never single-handedly consume Gemini API
+                # quota just by uploading.
+                "processing_status": "pending-approval",
             }
         )
         .execute()
         .data[0]
     )
 
-    job = pipeline.create_job(pdf_row["id"])
-    background_tasks.add_task(pipeline.run_pipeline, job["id"])
+    notifications.notify_admins(
+        type_="upload-pending-approval",
+        title="New upload awaiting approval",
+        message=f'"{pdf_row["file_name"]}" was uploaded by a student and is waiting for approval before AI extraction can run.',
+        link_url="/pdfs",
+    )
 
-    pdf_row["processing_status"] = "queued"
-    return ok(data=_row_to_response(pdf_row), message="File uploaded and queued for extraction.")
+    return ok(data=_row_to_response(pdf_row), message="File uploaded. It's now waiting for admin approval.")
 
 
 def _get_pdf_or_404(pdf_id: str) -> Dict[str, Any]:
@@ -193,6 +242,90 @@ def _get_pdf_or_404(pdf_id: str) -> Dict[str, Any]:
             raise NotFoundError("File not found.")
         raise
     return result.data
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+@router.post("/{pdf_id}/approve", response_model=ApiResponse[PdfResourceResponse])
+async def approve_pdf(
+    pdf_id: str,
+    background_tasks: BackgroundTasks,
+    admin_user: CurrentUser = Depends(require_admin),
+):
+    """Phase 7: the ONLY path that actually starts AI extraction. A fresh
+    upload sits in `pending-approval` until an admin calls this -- see the
+    module docstring for why this gate exists."""
+    row = _get_pdf_or_404(pdf_id)
+    if row["processing_status"] != "pending-approval":
+        raise AppException(
+            f"Only uploads awaiting approval can be approved (current status: {row['processing_status']}).",
+            status_code=409,
+        )
+
+    admin = get_supabase_admin()
+    updated = (
+        admin.table("pdf_resources")
+        .update({"reviewed_by": admin_user.id, "reviewed_at": _now_iso()})
+        .eq("id", pdf_id)
+        .execute()
+        .data[0]
+    )
+
+    job = pipeline.create_job(pdf_id)
+    background_tasks.add_task(pipeline.run_pipeline, job["id"])
+
+    updated["processing_status"] = "queued"
+    notifications.notify(
+        user_id=row["uploaded_by"],
+        type_="upload-approved",
+        title="Upload approved",
+        message=f'"{row["file_name"]}" was approved and extraction has started.',
+        link_url="/pdfs",
+    )
+    return ok(data=_row_to_response(updated), message="Upload approved and extraction queued.")
+
+
+@router.post("/{pdf_id}/reject", response_model=ApiResponse[PdfResourceResponse])
+async def reject_pdf(
+    pdf_id: str,
+    payload: RejectPdfRequest,
+    admin_user: CurrentUser = Depends(require_admin),
+):
+    row = _get_pdf_or_404(pdf_id)
+    if row["processing_status"] != "pending-approval":
+        raise AppException(
+            f"Only uploads awaiting approval can be rejected (current status: {row['processing_status']}).",
+            status_code=409,
+        )
+
+    updated = (
+        get_supabase_admin()
+        .table("pdf_resources")
+        .update(
+            {
+                "processing_status": "rejected",
+                "reviewed_by": admin_user.id,
+                "reviewed_at": _now_iso(),
+                "rejection_reason": payload.reason,
+            }
+        )
+        .eq("id", pdf_id)
+        .execute()
+        .data[0]
+    )
+
+    notifications.notify(
+        user_id=row["uploaded_by"],
+        type_="upload-rejected",
+        title="Upload rejected",
+        message=f'"{row["file_name"]}" was rejected: {payload.reason}',
+        link_url="/pdfs",
+    )
+    return ok(data=_row_to_response(updated), message="Upload rejected.")
 
 
 @router.post("/{pdf_id}/retry", response_model=ApiResponse[PdfResourceResponse])
@@ -210,6 +343,25 @@ async def retry_pdf(
         )
         if not admin_check.data or admin_check.data.get("role_id") != 3:
             raise ForbiddenError("Only the uploader or an admin can retry this file.")
+
+    # PHASE 7 FIX: `MAX_EXTRACTION_ATTEMPTS` existed in config but was never
+    # actually enforced anywhere -- every manual retry created a brand new
+    # `processing_jobs` row with no ceiling, so a permanently-broken file
+    # (bad API key, always-corrupt PDF, etc.) could be retried forever.
+    settings = get_settings()
+    prior_attempts = (
+        get_supabase_admin()
+        .table("processing_jobs")
+        .select("id", count="exact")
+        .eq("pdf_resource_id", pdf_id)
+        .execute()
+    )
+    if (prior_attempts.count or 0) >= settings.MAX_EXTRACTION_ATTEMPTS:
+        raise AppException(
+            f"This file has already reached the maximum of {settings.MAX_EXTRACTION_ATTEMPTS} extraction "
+            "attempts. An admin will need to review it directly rather than retrying again.",
+            status_code=409,
+        )
 
     job = pipeline.create_job(pdf_id)
     background_tasks.add_task(pipeline.run_pipeline, job["id"])

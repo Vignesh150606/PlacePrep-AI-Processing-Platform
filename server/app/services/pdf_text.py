@@ -1,5 +1,17 @@
 """
 Extracts plain text from a PDF's raw bytes.
+
+PHASE 7 FIX (Critical Issue 1 -- "Mixed PDF" support): `is_low_quality()`
+used to be the ONLY quality signal, and it averaged `chars_per_page` across
+the WHOLE document. A document with, say, 10 dense native-text question
+pages and 5 scanned/photographed solution pages easily averages above the
+OCR threshold even though those 5 pages individually have ~0 extractable
+text -- so OCR never ran on them, and (because `full_text` also silently
+drops any page with no text at all) their content simply vanished before
+Gemini ever saw it, with no error and no trace. `low_quality_page_numbers`
+below is the new per-page signal `pipeline.py` uses to OCR *just* the pages
+that actually need it, on an otherwise-fine document, instead of an
+all-or-nothing whole-document decision.
 """
 import io
 import logging
@@ -24,6 +36,10 @@ class PageText:
     page_number: int
     text: str
 
+    @property
+    def is_low_quality(self) -> bool:
+        return len(self.text) < get_settings().OCR_MIN_CHARS_PER_PAGE
+
 
 @dataclass
 class ExtractionResult:
@@ -41,7 +57,20 @@ class ExtractionResult:
         return sum(len(p.text) for p in self.pages) / self.page_count
 
     def is_low_quality(self) -> bool:
+        """Whole-document signal -- kept for the case where a document has
+        no usable text at all (every page low-quality), which is cheapest
+        to detect and fully OCR in one pass rather than page by page. See
+        `low_quality_page_numbers` for the mixed-document case."""
         return self.chars_per_page < get_settings().OCR_MIN_CHARS_PER_PAGE
+
+    @property
+    def low_quality_page_numbers(self) -> List[int]:
+        """Per-page signal (Phase 7): which individual 1-indexed pages look
+        like they have little/no real text, regardless of how the document
+        averages out overall. This is what makes a "10 text pages + 5
+        scanned pages" mixed document detectable -- the average alone
+        can't see it, but each page's own char count can."""
+        return [p.page_number for p in self.pages if p.is_low_quality]
 
 
 def extract_text_with_quality(pdf_bytes: bytes) -> ExtractionResult:

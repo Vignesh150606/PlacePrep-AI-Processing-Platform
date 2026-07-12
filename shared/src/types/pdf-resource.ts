@@ -1,11 +1,17 @@
 import type { ISODateString, UUID } from "./common";
 
+// PHASE 7: a fresh upload now lands in "pending-approval" and stays there
+// until an admin approves (-> "queued") or rejects (-> "rejected") it --
+// AI extraction no longer starts automatically on upload. See
+// server/app/api/v1/endpoints/pdfs.py's module docstring for why.
 export type PdfProcessingStatus =
   | "uploaded"
+  | "pending-approval"
   | "queued"
   | "processing"
   | "completed"
-  | "failed";
+  | "failed"
+  | "rejected";
 
 /** Phase 6: a PDF Library upload can now be a real PDF or a directly
  * uploaded photo/screenshot of a question paper -- see
@@ -33,4 +39,9 @@ export interface PDFResource {
   errorMessage: string | null;
   uploadedAt: ISODateString;
   processedAt: ISODateString | null;
+  /** Phase 7 -- upload approval workflow. Undefined/null for any upload
+   * that predates this pass or hasn't been reviewed yet. */
+  reviewedById?: UUID | null;
+  reviewedAt?: ISODateString | null;
+  rejectionReason?: string | null;
 }

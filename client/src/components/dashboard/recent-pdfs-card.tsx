@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { FileText, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Clock, FileText, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -10,10 +10,13 @@ import type { PdfProcessingStatus } from "@placeprep/shared";
 
 const STATUS_CONFIG: Record<PdfProcessingStatus, { icon: typeof FileText; className: string; label: string }> = {
   uploaded: { icon: FileText, className: "text-muted-foreground", label: "Uploaded" },
+  // Phase 7: upload approval workflow added two new statuses.
+  "pending-approval": { icon: Clock, className: "text-warning-500", label: "Pending Approval" },
   queued: { icon: Loader2, className: "text-warning-500", label: "Queued" },
   processing: { icon: Loader2, className: "text-accent-600 animate-spin", label: "Processing" },
   completed: { icon: CheckCircle2, className: "text-correct-600 dark:text-correct-500", label: "Completed" },
   failed: { icon: XCircle, className: "text-incorrect-600 dark:text-incorrect-500", label: "Failed" },
+  rejected: { icon: XCircle, className: "text-incorrect-600 dark:text-incorrect-500", label: "Rejected" },
 };
 
 /**

@@ -15,6 +15,8 @@ import { QuizPage } from "@/pages/quiz-page";
 import { CompaniesPage } from "@/pages/companies-page";
 import { CompanyDetailPage } from "@/pages/company-detail-page";
 import { PdfLibraryPage } from "@/pages/pdf-library-page";
+import { PlacementCalendarPage } from "@/pages/placement-calendar-page";
+import { InterviewExperiencesPage } from "@/pages/interview-experiences-page";
 import { WrongAnswersPage } from "@/pages/wrong-answers-page";
 import { BookmarksPage } from "@/pages/bookmarks-page";
 import { AnalyticsPage } from "@/pages/analytics-page";
@@ -95,10 +97,12 @@ const pdfsRoute = createRoute({
   component: PdfLibraryPage,
 });
 
+// MODIFIED (Phase 9): was a ComingSoonPage stub — now the real Interview
+// Experience Repository.
 const experiencesRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/experiences",
-  component: () => <ComingSoonPage title="Interview Experiences" />,
+  component: InterviewExperiencesPage,
 });
 
 const communityRoute = createRoute({
@@ -107,10 +111,11 @@ const communityRoute = createRoute({
   component: () => <ComingSoonPage title="Community" />,
 });
 
+// MODIFIED (Phase 8): was a ComingSoonPage stub — now the real Placement Calendar.
 const calendarRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/calendar",
-  component: () => <ComingSoonPage title="Placement Calendar" />,
+  component: PlacementCalendarPage,
 });
 
 // MODIFIED (Module 5): was a ComingSoonPage stub — now the real Bookmarks page.
