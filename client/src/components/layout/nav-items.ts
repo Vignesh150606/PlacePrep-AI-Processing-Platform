@@ -13,6 +13,7 @@ import {
   Settings,
   BarChart3,
   ShieldCheck,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 
@@ -62,7 +63,10 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: "Admin",
-    items: [{ label: "Review Queue", href: "/admin/review", icon: ShieldCheck, adminOnly: true }],
+    items: [
+      { label: "Dashboard", href: "/admin", icon: Gauge, adminOnly: true },
+      { label: "Review Queue", href: "/admin/review", icon: ShieldCheck, adminOnly: true },
+    ],
   },
   {
     label: "Account",

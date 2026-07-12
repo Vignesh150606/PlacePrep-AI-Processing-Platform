@@ -20,6 +20,7 @@ import { InterviewExperiencesPage } from "@/pages/interview-experiences-page";
 import { WrongAnswersPage } from "@/pages/wrong-answers-page";
 import { BookmarksPage } from "@/pages/bookmarks-page";
 import { AnalyticsPage } from "@/pages/analytics-page";
+import { AdminDashboardPage } from "@/pages/admin-dashboard-page";
 import { AdminReviewPage } from "@/pages/admin-review-page";
 import { NotificationsPage } from "@/pages/notifications-page";
 import { ComingSoonPage } from "@/pages/coming-soon";
@@ -139,6 +140,15 @@ const analyticsRoute = createRoute({
   component: AnalyticsPage,
 });
 
+// NEW (Admin Portal Expansion, Module 1). Same "not gated at the route
+// level" pattern as adminReviewRoute below -- backend endpoints are
+// require_admin-gated and the nav entry is hidden from non-admins.
+const adminDashboardRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/admin",
+  component: AdminDashboardPage,
+});
+
 // NEW (Module 8). Not admin-gated at the route level on purpose — the backend
 // endpoints it calls are admin-gated (require_admin), and the nav entry is
 // already hidden from non-admins (see nav-items.ts) — a non-admin hitting
@@ -186,6 +196,7 @@ const routeTree = rootRoute.addChildren([
     bookmarksRoute,
     wrongAnswersRoute,
     analyticsRoute,
+    adminDashboardRoute,
     adminReviewRoute,
     notificationsRoute,
     settingsRoute,

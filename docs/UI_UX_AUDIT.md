@@ -21,7 +21,7 @@ design direction:
 That direction is implemented consistently: Tailwind v4 CSS-variable
 tokens, full light/dark parity, `prefers-reduced-motion` support, and a
 real primitive layer (`empty-state`, `error-state`, `skeleton`,
-`stat-card`, `section-header`) that most of the audited pages already use
+`stat-card`) that most of the audited pages already use
 correctly. `PROJECT_STATE.md` documents several real, verified prior
 development passes (typecheck/lint/build actually executed, not just
 claimed).
@@ -45,11 +45,13 @@ Token source of truth: `client/src/index.css`.
 
 Component primitives (`client/src/components/ui/`): `avatar`, `badge`,
 `button`, `card`, `dialog`, `dropdown-menu`, `empty-state`, `error-state`,
-`input`, `label`, `search-bar`, `section-header`, `skeleton`, `stat-card`,
-`table`, `tabs`, `theme-toggle`, `tooltip`. All built on Radix primitives
-where interactive (`Dialog`, `DropdownMenu`, `Tabs`, `Tooltip`), which is
+`input`, `label`, `search-bar`, `skeleton`, `stat-card`,
+`table`, `tabs`, `theme-toggle`. All built on Radix primitives
+where interactive (`Dialog`, `DropdownMenu`, `Tabs`), which is
 the right call for accessibility — Radix handles focus management, ARIA
-roles, and keyboard interaction correctly out of the box.
+roles, and keyboard interaction correctly out of the box. (`section-header`
+and `tooltip` were removed in the Sprint 1A cleanup pass as unused —
+neither had any remaining call sites.)
 
 **Recommendation for future work:** this primitive list is solid but has
 a couple of real gaps if the app grows — no `Select`/`Combobox` primitive

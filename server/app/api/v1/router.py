@@ -5,6 +5,7 @@ in `app.main` under `settings.API_V1_PREFIX`.
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    admin,
     bookmarks,
     calendar,
     companies,
@@ -22,6 +23,7 @@ from app.api.v1.endpoints import (
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])
+api_router.include_router(admin.router, prefix="/admin", tags=["Admin"])
 api_router.include_router(profiles.router, prefix="/profiles", tags=["Profiles"])
 api_router.include_router(pdfs.router, prefix="/pdfs", tags=["PDFs"])
 api_router.include_router(questions.router, prefix="/questions", tags=["Questions"])

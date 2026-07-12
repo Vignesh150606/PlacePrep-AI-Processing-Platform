@@ -1,21 +1,65 @@
 # PlacePrep Project State
 
-Last updated: 2026-07-12 (Phase 9 -- Interview Experience Repository)
+Last updated: 2026-07-12 (Admin Portal Expansion -- Module 1: Dashboard + Users & Roles)
 
 ## This pass, in one paragraph
 
-Phase 9 of the phased plan (see Phase 7's entry below for how this
-plan came about): the Interview Experience Repository. Like Phase 8,
-this had partial scaffolding worth checking for before writing anything
-new -- `shared/src/types/interview-experience.ts` already had a
-carefully-designed shape (rounds as structured sub-objects, anonymity,
-outcome, difficulty) and `bookmarks.target_type`'s check constraint
-already listed `'interview-experience'` as valid, both since Sprint 3 --
-but there was zero backing database table (confirmed by grep across
-every migration). This is a ground-up build on top of that existing
-type design, not a fix.
+Sprint 1A cleanup (dead mock files, orphaned `tooltip`/`section-header`
+primitives, one unused dependency -- see `MERGE_NOTES.md`) was followed by
+a full admin-functionality audit before writing anything: read every
+endpoint module, every admin-gated frontend surface, and the schema, to
+find out what genuinely existed versus what the original module list
+assumed existed. Result: Question moderation, upload approval, the AI/OCR/
+processing queue with retry, Calendar management, and Interview Experience
+moderation were all already complete (just scattered across admin-only
+tabs on otherwise-shared pages, with zero central landing page). User
+management and role changes did not exist at all -- promoting/demoting a
+user meant editing `role_id` directly in the Supabase table editor. This
+pass built the first Admin Portal module: a real `/admin` dashboard
+(queue-status stat cards linking out to each existing tool) plus full
+User & Role management (search, filter, paginate, promote/demote), and
+nothing else -- audit trails, storage/AI usage, and persisted error logs
+are separate future passes, not squeezed into this one.
 
-## Phase 9 detail
+## Admin Portal Expansion -- Module 1 detail
+
+**New backend module**, `server/app/api/v1/endpoints/admin.py`, mounted at
+`/admin` (3 routes, `require_admin`-gated, no schema migration needed --
+reuses `profiles`/`role_id` as-is):
+- `GET /admin/dashboard-summary` -- counts mirrored from each existing
+  table (`pdf_resources`, `questions`, `interview_experiences`,
+  `processing_jobs`, `interview_experience_reports`, `profiles`), same
+  count-per-status query style as `processing.py`'s existing dashboard.
+- `GET /admin/users` -- paginated, `search` (ilike on name/email),
+  `role` filter. Same `page`/`page_size`/`count="exact"` pattern as
+  `pdfs.py`/`questions.py`.
+- `PATCH /admin/users/{id}/role` -- validates the target role, blocks an
+  admin from changing their own role (self-lockout guard), updates
+  `role_id`.
+
+**New frontend:** `admin-dashboard-page.tsx` (stat cards + searchable/
+filterable/paginated user table with a role-change dropdown) and
+`use-admin.ts` (mirrors `use-processing.ts`/`use-pdfs.ts` hook shape).
+Reuses the existing `Profile`/`UserRole` shared types directly for the
+user list rather than introducing a parallel type. Wired into
+`router.tsx` as `/admin` and into `nav-items.ts` as "Dashboard" above the
+existing "Review Queue" entry, following the same "not gated at the route
+level, backend + nav enforce it" pattern already used for `/admin/review`.
+
+**Deliberately not built this pass** (see the audit's missing-functionality
+list for the reasoning): audit trail for role changes, storage usage,
+AI/token usage tracking, persisted queryable error logs (today's
+unhandled-exception logging is stdout-only), and Community moderation
+(blocked on the Community module itself not existing yet -- it's still a
+`ComingSoonPage` stub).
+
+**Verified:** `pnpm typecheck` (shared + client), `pnpm lint` (oxlint,
+0 errors, same 1 pre-existing `main.tsx` fast-refresh warning as before),
+`pnpm build`, `ruff check`, and a live Python import of `app.main` confirming
+all 3 new routes register (57 total routes, up from 54).
+
+## Phase 9 detail (previous pass)
+
 
 **Schema** (migration `0009`, four new tables): `interview_experiences`
 (the submission), `interview_experience_rounds` (structured round-by-round
