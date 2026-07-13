@@ -58,8 +58,6 @@ export function useUpdateUserRole() {
     },
   });
 }
-<<<<<<< HEAD
-=======
 
 export type AuditAction =
   | "pdf-approved"
@@ -113,4 +111,3 @@ export function useAdminAuditLogs(params: {
     staleTime: 10_000,
   });
 }
->>>>>>> 97283c7 (Admin panel)

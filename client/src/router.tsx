@@ -21,10 +21,7 @@ import { WrongAnswersPage } from "@/pages/wrong-answers-page";
 import { BookmarksPage } from "@/pages/bookmarks-page";
 import { AnalyticsPage } from "@/pages/analytics-page";
 import { AdminDashboardPage } from "@/pages/admin-dashboard-page";
-<<<<<<< HEAD
-=======
 import { AdminAuditLogPage } from "@/pages/admin-audit-log-page";
->>>>>>> 97283c7 (Admin panel)
 import { AdminReviewPage } from "@/pages/admin-review-page";
 import { NotificationsPage } from "@/pages/notifications-page";
 import { ComingSoonPage } from "@/pages/coming-soon";

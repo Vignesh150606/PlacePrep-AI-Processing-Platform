@@ -1,24 +1,4 @@
 """
-<<<<<<< HEAD
-Admin Portal -- Dashboard summary + User & Role management.
-
-Before this, the only admin-specific surface was the Question Review Queue
-(`/admin/review`) plus admin-only tabs bolted onto otherwise-shared pages
-(PDF Library's Pending Approval / Processing Dashboard tabs, Calendar's
-inline edit controls, Interview Experiences' inline moderation controls).
-There was no single admin landing page, and -- more importantly -- no way
-to view the user list or change a user's role without going into the
-Supabase table editor directly. This module adds both, following the same
-`require_admin`-gated, self-contained endpoint-module pattern used
-throughout the rest of the API (see `processing.py` for the closest
-precedent -- this file's dashboard-summary endpoint mirrors its
-count-per-status query style).
-
-Deliberately NOT built here (separate, larger passes -- see
-PROJECT_STATE.md): an audit trail for role changes, storage/AI usage
-tracking, and persisted error logs. Bundling those in would mean five
-half-built things instead of one complete one.
-=======
 Admin Portal -- Dashboard summary, User & Role management, and the Audit
 Log (Modules 1 and 2 of the Admin Portal Expansion).
 
@@ -40,7 +20,6 @@ count-per-status query style).
 
 Still deliberately NOT built here (separate, larger passes -- see
 PROJECT_STATE.md): storage/AI usage tracking and persisted error logs.
->>>>>>> 97283c7 (Admin panel)
 """
 from typing import Any, Dict, List, Optional
 
@@ -51,20 +30,14 @@ from app.core.exceptions import AppException, NotFoundError
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
-<<<<<<< HEAD
-=======
 from app.services import audit
->>>>>>> 97283c7 (Admin panel)
 
 router = APIRouter()
 
 _ROLE_NAMES = {1: "student", 2: "alumni", 3: "admin"}
 _ROLE_IDS = {name: role_id for role_id, name in _ROLE_NAMES.items()}
 _VALID_ROLES = tuple(_ROLE_IDS.keys())
-<<<<<<< HEAD
-=======
 _VALID_AUDIT_TARGET_TYPES = ("pdf", "question", "interview-experience", "user")
->>>>>>> 97283c7 (Admin panel)
 
 
 class DashboardSummary(CamelModel):
@@ -205,15 +178,6 @@ async def update_user_role(
         raise AppException("You can't change your own role. Ask another admin.", status_code=400)
 
     admin = get_supabase_admin()
-<<<<<<< HEAD
-    existing = admin.table("profiles").select("id").eq("id", user_id).execute().data
-    if not existing:
-        raise NotFoundError("User not found.")
-
-    admin.table("profiles").update({"role_id": _ROLE_IDS[payload.role]}).eq("id", user_id).execute()
-    row = admin.table("profiles").select("*").eq("id", user_id).single().execute().data
-    return ok(data=_user_row_to_response(row), message=f"Role updated to {payload.role}.")
-=======
     existing = admin.table("profiles").select("id, role_id").eq("id", user_id).execute().data
     if not existing:
         raise NotFoundError("User not found.")
@@ -308,4 +272,3 @@ async def list_audit_logs(
         data=AuditLogListResponse(items=items, total=count_result.count or 0, page=page, page_size=page_size),
         message="Audit logs fetched.",
     )
->>>>>>> 97283c7 (Admin panel)

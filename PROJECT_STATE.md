@@ -1,29 +1,5 @@
 # PlacePrep Project State
 
-<<<<<<< HEAD
-Last updated: 2026-07-12 (Admin Portal Expansion -- Module 1: Dashboard + Users & Roles)
-
-## This pass, in one paragraph
-
-Sprint 1A cleanup (dead mock files, orphaned `tooltip`/`section-header`
-primitives, one unused dependency -- see `MERGE_NOTES.md`) was followed by
-a full admin-functionality audit before writing anything: read every
-endpoint module, every admin-gated frontend surface, and the schema, to
-find out what genuinely existed versus what the original module list
-assumed existed. Result: Question moderation, upload approval, the AI/OCR/
-processing queue with retry, Calendar management, and Interview Experience
-moderation were all already complete (just scattered across admin-only
-tabs on otherwise-shared pages, with zero central landing page). User
-management and role changes did not exist at all -- promoting/demoting a
-user meant editing `role_id` directly in the Supabase table editor. This
-pass built the first Admin Portal module: a real `/admin` dashboard
-(queue-status stat cards linking out to each existing tool) plus full
-User & Role management (search, filter, paginate, promote/demote), and
-nothing else -- audit trails, storage/AI usage, and persisted error logs
-are separate future passes, not squeezed into this one.
-
-## Admin Portal Expansion -- Module 1 detail
-=======
 Last updated: 2026-07-12 (Admin Portal Expansion -- Module 2: Audit Log)
 
 ## This pass, in one paragraph
@@ -99,7 +75,6 @@ else (schema shape, RLS policy, index names) was checked by hand against
 migrations `0001`/`0002`/`0009`'s exact conventions rather than assumed.
 
 ## Admin Portal Expansion -- Module 1 detail (previous pass)
->>>>>>> 97283c7 (Admin panel)
 
 **New backend module**, `server/app/api/v1/endpoints/admin.py`, mounted at
 `/admin` (3 routes, `require_admin`-gated, no schema migration needed --
