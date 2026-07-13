@@ -34,7 +34,7 @@ from app.core.exceptions import AppException, NotFoundError
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
-from app.services import question_merge
+from app.services import audit, question_merge
 
 router = APIRouter()
 
@@ -238,7 +238,7 @@ def _get_question_or_404(question_id: str) -> Dict[str, Any]:
 async def update_question_status(
     question_id: str,
     payload: QuestionStatusUpdateRequest,
-    _admin: CurrentUser = Depends(require_admin),
+    admin_user: CurrentUser = Depends(require_admin),
 ):
     """Module 8 -- Admin Review: Approve / Reject."""
     if payload.status not in ("approved", "rejected"):
@@ -246,6 +246,12 @@ async def update_question_status(
 
     _get_question_or_404(question_id)
     get_supabase_admin().table("questions").update({"status": payload.status}).eq("id", question_id).execute()
+    audit.log_admin_action(
+        admin_id=admin_user.id,
+        action="question-approved" if payload.status == "approved" else "question-rejected",
+        target_type="question",
+        target_id=question_id,
+    )
     return ok(data=_row_to_response(_get_question_or_404(question_id)), message=f"Question {payload.status}.")
 
 
@@ -253,7 +259,7 @@ async def update_question_status(
 async def update_question(
     question_id: str,
     payload: QuestionUpdateRequest,
-    _admin: CurrentUser = Depends(require_admin),
+    admin_user: CurrentUser = Depends(require_admin),
 ):
     """Module 8 -- Admin Review: Edit."""
     _get_question_or_404(question_id)
@@ -270,6 +276,13 @@ async def update_question(
 
     if updates:
         get_supabase_admin().table("questions").update(updates).eq("id", question_id).execute()
+        audit.log_admin_action(
+            admin_id=admin_user.id,
+            action="question-edited",
+            target_type="question",
+            target_id=question_id,
+            metadata={"fields_changed": sorted(updates.keys())},
+        )
 
     return ok(data=_row_to_response(_get_question_or_404(question_id)), message="Question updated.")
 
@@ -278,7 +291,7 @@ async def update_question(
 async def merge_question(
     canonical_id: str,
     payload: QuestionMergeRequest,
-    _admin: CurrentUser = Depends(require_admin),
+    admin_user: CurrentUser = Depends(require_admin),
 ):
     """Module 8 -- Admin Review: Merge (Phase 6 -- see
     services/question_merge.py for the real implementation: this is
@@ -289,6 +302,13 @@ async def merge_question(
     _get_question_or_404(payload.duplicate_id)
 
     result = question_merge.merge_questions(canonical_id=canonical_id, duplicate_id=payload.duplicate_id)
+    audit.log_admin_action(
+        admin_id=admin_user.id,
+        action="question-merged",
+        target_type="question",
+        target_id=canonical_id,
+        metadata={"duplicate_id": payload.duplicate_id, "attempts_updated": result.attempts_updated},
+    )
 
     return ok(
         data=QuestionMergeResponse(
@@ -303,10 +323,13 @@ async def merge_question(
 
 
 @router.delete("/{question_id}", response_model=ApiResponse[None])
-async def delete_question(question_id: str, _admin: CurrentUser = Depends(require_admin)):
+async def delete_question(question_id: str, admin_user: CurrentUser = Depends(require_admin)):
     """Module 8 -- Admin Review: Delete. `question_options`/`question_topics`/
     `question_companies` all reference `questions.id` with ON DELETE CASCADE
     (migration 0001), so this cleans up in one call."""
     _get_question_or_404(question_id)
     get_supabase_admin().table("questions").delete().eq("id", question_id).execute()
+    audit.log_admin_action(
+        admin_id=admin_user.id, action="question-deleted", target_type="question", target_id=question_id,
+    )
     return ok(message="Question deleted.")

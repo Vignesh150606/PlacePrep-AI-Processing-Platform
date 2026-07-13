@@ -21,6 +21,10 @@ import { WrongAnswersPage } from "@/pages/wrong-answers-page";
 import { BookmarksPage } from "@/pages/bookmarks-page";
 import { AnalyticsPage } from "@/pages/analytics-page";
 import { AdminDashboardPage } from "@/pages/admin-dashboard-page";
+<<<<<<< HEAD
+=======
+import { AdminAuditLogPage } from "@/pages/admin-audit-log-page";
+>>>>>>> 97283c7 (Admin panel)
 import { AdminReviewPage } from "@/pages/admin-review-page";
 import { NotificationsPage } from "@/pages/notifications-page";
 import { ComingSoonPage } from "@/pages/coming-soon";
@@ -160,6 +164,14 @@ const adminReviewRoute = createRoute({
   component: AdminReviewPage,
 });
 
+// NEW (Admin Portal Expansion, Module 2). Same not-gated-at-the-route-level
+// pattern as adminDashboardRoute/adminReviewRoute above.
+const adminAuditLogRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/admin/audit-log",
+  component: AdminAuditLogPage,
+});
+
 // MODIFIED (Sprint 1A): was a ComingSoonPage stub — now the real
 // Notifications page. Follows the same conversion pattern as Bookmarks
 // (Module 5) and Wrong Answers (Module 4) above.
@@ -198,6 +210,7 @@ const routeTree = rootRoute.addChildren([
     analyticsRoute,
     adminDashboardRoute,
     adminReviewRoute,
+    adminAuditLogRoute,
     notificationsRoute,
     settingsRoute,
     notFoundRoute,

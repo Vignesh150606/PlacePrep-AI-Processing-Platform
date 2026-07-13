@@ -58,3 +58,59 @@ export function useUpdateUserRole() {
     },
   });
 }
+<<<<<<< HEAD
+=======
+
+export type AuditAction =
+  | "pdf-approved"
+  | "pdf-rejected"
+  | "question-approved"
+  | "question-rejected"
+  | "question-edited"
+  | "question-merged"
+  | "question-deleted"
+  | "interview-experience-approved"
+  | "interview-experience-rejected"
+  | "interview-experience-edited"
+  | "interview-experience-deleted"
+  | "user-role-changed";
+
+export type AuditTargetType = "pdf" | "question" | "interview-experience" | "user";
+
+export interface AuditLogEntry {
+  id: string;
+  adminId: string;
+  adminName: string;
+  action: AuditAction;
+  targetType: AuditTargetType;
+  targetId: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface AuditLogListResponse {
+  items: AuditLogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export function useAdminAuditLogs(params: {
+  page: number;
+  pageSize: number;
+  action?: AuditAction;
+  targetType?: AuditTargetType;
+}) {
+  const query = new URLSearchParams();
+  query.set("page", String(params.page));
+  query.set("page_size", String(params.pageSize));
+  if (params.action) query.set("action", params.action);
+  if (params.targetType) query.set("target_type", params.targetType);
+
+  return useQuery({
+    queryKey: ["admin", "audit-logs", params],
+    queryFn: () => apiGet<AuditLogListResponse>(`/admin/audit-logs?${query.toString()}`),
+    staleTime: 10_000,
+  });
+}
+>>>>>>> 97283c7 (Admin panel)

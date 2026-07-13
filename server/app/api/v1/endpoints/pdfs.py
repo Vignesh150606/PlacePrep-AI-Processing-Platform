@@ -54,7 +54,7 @@ from app.core.rate_limit import upload_limit
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
-from app.services import notifications, pipeline
+from app.services import audit, notifications, pipeline
 
 router = APIRouter()
 
@@ -286,6 +286,10 @@ async def approve_pdf(
         message=f'"{row["file_name"]}" was approved and extraction has started.',
         link_url="/pdfs",
     )
+    audit.log_admin_action(
+        admin_id=admin_user.id, action="pdf-approved", target_type="pdf", target_id=pdf_id,
+        metadata={"file_name": row["file_name"]},
+    )
     return ok(data=_row_to_response(updated), message="Upload approved and extraction queued.")
 
 
@@ -324,6 +328,10 @@ async def reject_pdf(
         title="Upload rejected",
         message=f'"{row["file_name"]}" was rejected: {payload.reason}',
         link_url="/pdfs",
+    )
+    audit.log_admin_action(
+        admin_id=admin_user.id, action="pdf-rejected", target_type="pdf", target_id=pdf_id,
+        metadata={"file_name": row["file_name"], "reason": payload.reason},
     )
     return ok(data=_row_to_response(updated), message="Upload rejected.")
 

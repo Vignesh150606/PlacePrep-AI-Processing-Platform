@@ -38,6 +38,7 @@ from app.core.exceptions import AppException, NotFoundError
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
+from app.services import audit
 
 router = APIRouter()
 
@@ -526,6 +527,12 @@ async def update_status(
     if payload.status == "rejected":
         updates["rejection_reason"] = payload.rejection_reason
     admin.table("interview_experiences").update(updates).eq("id", experience_id).execute()
+    audit.log_admin_action(
+        admin_id=admin_user.id,
+        action="interview-experience-approved" if payload.status == "approved" else "interview-experience-rejected",
+        target_type="interview-experience",
+        target_id=experience_id,
+    )
 
     updated = _get_experience_or_404(experience_id)
     rounds = _rounds_for([experience_id]).get(experience_id, [])
@@ -576,6 +583,14 @@ async def update_experience(
                 ]
             ).execute()
 
+    audit.log_admin_action(
+        admin_id=admin_user.id,
+        action="interview-experience-edited",
+        target_type="interview-experience",
+        target_id=experience_id,
+        metadata={"fields_changed": sorted(updates.keys()) + (["rounds"] if payload.rounds is not None else [])},
+    )
+
     updated = _get_experience_or_404(experience_id)
     rounds = _rounds_for([experience_id]).get(experience_id, [])
     votes = _vote_counts_for([experience_id]).get(experience_id, {})
@@ -597,6 +612,12 @@ async def update_experience(
 async def delete_experience(experience_id: str, admin_user: CurrentUser = Depends(require_admin)):
     _get_experience_or_404(experience_id)
     get_supabase_admin().table("interview_experiences").delete().eq("id", experience_id).execute()
+    audit.log_admin_action(
+        admin_id=admin_user.id,
+        action="interview-experience-deleted",
+        target_type="interview-experience",
+        target_id=experience_id,
+    )
     return ok(message="Experience deleted.")
 
 

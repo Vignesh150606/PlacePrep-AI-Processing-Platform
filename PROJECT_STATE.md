@@ -1,5 +1,6 @@
 # PlacePrep Project State
 
+<<<<<<< HEAD
 Last updated: 2026-07-12 (Admin Portal Expansion -- Module 1: Dashboard + Users & Roles)
 
 ## This pass, in one paragraph
@@ -22,6 +23,83 @@ nothing else -- audit trails, storage/AI usage, and persisted error logs
 are separate future passes, not squeezed into this one.
 
 ## Admin Portal Expansion -- Module 1 detail
+=======
+Last updated: 2026-07-12 (Admin Portal Expansion -- Module 2: Audit Log)
+
+## This pass, in one paragraph
+
+Module 2 of the Admin Portal Expansion: the audit trail that Module 1
+deliberately deferred. Every admin write across the whole API -- PDF
+approve/reject, question approve/reject/edit/merge/delete, interview
+experience approve/reject/edit/delete, and user role changes -- now logs
+to a new `admin_audit_logs` table via one shared `log_admin_action()`
+helper, and a new `/admin/audit-log` page lets admins filter and page
+through that history. This is a genuinely new table (migration `0010`),
+not a repurposing of the existing `activity_logs` table, because that
+table is a per-user "recent activity" feed rendered on that user's own
+dashboard -- mixing admin actions against *other* users' content into it
+would have been the wrong direction entirely. Storage/AI usage tracking
+and persisted error logs are still separate, un-started future passes.
+
+## Admin Portal Expansion -- Module 2 detail
+
+**New migration**, `supabase/migrations/0010_admin_portal_audit_logs.sql`:
+`admin_audit_logs` table (12-action CHECK constraint covering every admin
+write that exists today, `target_type` in `pdf`/`question`/
+`interview-experience`/`user`, `metadata jsonb` for action-specific
+detail), 3 indexes (`admin_id`, `created_at desc`, `(target_type,
+target_id)`), RLS enabled with a single admin-only select policy reusing
+the existing `public.is_admin()` helper function (same pattern as
+migration `0009`'s `interview_experience_reports` policy). No insert/
+update/delete policy -- all writes go through the service-role client,
+same as every other table.
+
+**New service**, `server/app/services/audit.py`: one function,
+`log_admin_action(admin_id, action, target_type, target_id, metadata)`,
+mirroring the existing `notifications.py` service shape. Deliberately
+*not* wrapped in try/except -- `notifications.notify()` already doesn't
+swallow failures at its call sites (e.g. in `pdfs.py`'s `approve_pdf`),
+so making audit logging fail differently would be a new, inconsistent
+failure mode rather than a fix.
+
+**Wired into every existing admin write**, right after the state-changing
+DB call succeeds (same placement `notifications.notify()` already uses):
+`pdfs.py` (`approve_pdf`, `reject_pdf`), `questions.py`
+(`update_question_status`, `update_question`, `merge_question`,
+`delete_question`), `interview_experiences.py` (`update_status`,
+`update_experience`, `delete_experience`), and `admin.py`
+(`update_user_role` -- now records `{from, to}` role names in metadata).
+Each of these endpoints' `_admin` parameter (previously unused, hence the
+underscore) became `admin_user` since the audit call now needs the
+caller's id.
+
+**New endpoint**, `GET /admin/audit-logs` in `admin.py`: paginated,
+optional `action`/`target_type` filters. Resolves each entry's admin name
+via a batch `profiles` lookup (`.in_("id", admin_ids)`) rather than a
+Postgrest FK-embed -- there was no existing precedent in this codebase for
+embedding `profiles` through a single FK column, and the batch-lookup-then-
+merge approach already has one (`processing.py`'s pdf-name lookup), so
+that's what this copies rather than guessing at untested join syntax.
+
+**New frontend:** `admin-audit-log-page.tsx` (filterable/paginated table,
+color-coded action badges, a "View" link out to the relevant existing
+page per target type) and the matching hooks/types appended to
+`use-admin.ts`. Wired into `router.tsx` as `/admin/audit-log`, into
+`nav-items.ts` as "Audit Log" under the Admin section, and linked directly
+from the Admin Dashboard header.
+
+**Verified:** `pnpm typecheck` (shared + client), `pnpm lint` (oxlint,
+0 errors, same 1 pre-existing `main.tsx` fast-refresh warning as before),
+`pnpm build`, `ruff check`, and a live Python import of `app.main`
+confirming the new route registers (58 total routes, up from 57). The
+migration SQL itself could not be run against a live database from this
+environment (no DB access here) -- it needs to actually be applied via
+the Supabase SQL editor/CLI before the new endpoints will work; everything
+else (schema shape, RLS policy, index names) was checked by hand against
+migrations `0001`/`0002`/`0009`'s exact conventions rather than assumed.
+
+## Admin Portal Expansion -- Module 1 detail (previous pass)
+>>>>>>> 97283c7 (Admin panel)
 
 **New backend module**, `server/app/api/v1/endpoints/admin.py`, mounted at
 `/admin` (3 routes, `require_admin`-gated, no schema migration needed --

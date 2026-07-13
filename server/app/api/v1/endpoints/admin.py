@@ -1,4 +1,5 @@
 """
+<<<<<<< HEAD
 Admin Portal -- Dashboard summary + User & Role management.
 
 Before this, the only admin-specific surface was the Question Review Queue
@@ -17,6 +18,29 @@ Deliberately NOT built here (separate, larger passes -- see
 PROJECT_STATE.md): an audit trail for role changes, storage/AI usage
 tracking, and persisted error logs. Bundling those in would mean five
 half-built things instead of one complete one.
+=======
+Admin Portal -- Dashboard summary, User & Role management, and the Audit
+Log (Modules 1 and 2 of the Admin Portal Expansion).
+
+Before Module 1, the only admin-specific surface was the Question Review
+Queue (`/admin/review`) plus admin-only tabs bolted onto otherwise-shared
+pages (PDF Library's Pending Approval / Processing Dashboard tabs,
+Calendar's inline edit controls, Interview Experiences' inline moderation
+controls). There was no single admin landing page, and -- more
+importantly -- no way to view the user list or change a user's role
+without going into the Supabase table editor directly. Module 1 added
+both. Module 2 adds the audit trail those role changes (and every other
+admin write across the API) now feed into -- see `app/services/audit.py`
+for the logging helper and migration `0010` for the table/RLS.
+
+Follows the same `require_admin`-gated, self-contained endpoint-module
+pattern used throughout the rest of the API (see `processing.py` for the
+closest precedent -- the dashboard-summary endpoint mirrors its
+count-per-status query style).
+
+Still deliberately NOT built here (separate, larger passes -- see
+PROJECT_STATE.md): storage/AI usage tracking and persisted error logs.
+>>>>>>> 97283c7 (Admin panel)
 """
 from typing import Any, Dict, List, Optional
 
@@ -27,12 +51,20 @@ from app.core.exceptions import AppException, NotFoundError
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
+<<<<<<< HEAD
+=======
+from app.services import audit
+>>>>>>> 97283c7 (Admin panel)
 
 router = APIRouter()
 
 _ROLE_NAMES = {1: "student", 2: "alumni", 3: "admin"}
 _ROLE_IDS = {name: role_id for role_id, name in _ROLE_NAMES.items()}
 _VALID_ROLES = tuple(_ROLE_IDS.keys())
+<<<<<<< HEAD
+=======
+_VALID_AUDIT_TARGET_TYPES = ("pdf", "question", "interview-experience", "user")
+>>>>>>> 97283c7 (Admin panel)
 
 
 class DashboardSummary(CamelModel):
@@ -173,6 +205,7 @@ async def update_user_role(
         raise AppException("You can't change your own role. Ask another admin.", status_code=400)
 
     admin = get_supabase_admin()
+<<<<<<< HEAD
     existing = admin.table("profiles").select("id").eq("id", user_id).execute().data
     if not existing:
         raise NotFoundError("User not found.")
@@ -180,3 +213,99 @@ async def update_user_role(
     admin.table("profiles").update({"role_id": _ROLE_IDS[payload.role]}).eq("id", user_id).execute()
     row = admin.table("profiles").select("*").eq("id", user_id).single().execute().data
     return ok(data=_user_row_to_response(row), message=f"Role updated to {payload.role}.")
+=======
+    existing = admin.table("profiles").select("id, role_id").eq("id", user_id).execute().data
+    if not existing:
+        raise NotFoundError("User not found.")
+    previous_role = _ROLE_NAMES.get(existing[0]["role_id"], "student")
+
+    admin.table("profiles").update({"role_id": _ROLE_IDS[payload.role]}).eq("id", user_id).execute()
+    audit.log_admin_action(
+        admin_id=admin_user.id,
+        action="user-role-changed",
+        target_type="user",
+        target_id=user_id,
+        metadata={"from": previous_role, "to": payload.role},
+    )
+    row = admin.table("profiles").select("*").eq("id", user_id).single().execute().data
+    return ok(data=_user_row_to_response(row), message=f"Role updated to {payload.role}.")
+
+
+class AuditLogEntry(CamelModel):
+    id: str
+    admin_id: str
+    admin_name: str
+    action: str
+    target_type: str
+    target_id: str
+    metadata: Dict[str, Any]
+    created_at: str
+
+
+class AuditLogListResponse(CamelModel):
+    items: List[AuditLogEntry]
+    total: int
+    page: int
+    page_size: int
+
+
+@router.get("/audit-logs", response_model=ApiResponse[AuditLogListResponse])
+async def list_audit_logs(
+    _admin: CurrentUser = Depends(require_admin),
+    page: int = 1,
+    page_size: int = 20,
+    action: Optional[str] = None,
+    target_type: Optional[str] = None,
+):
+    if target_type is not None and target_type not in _VALID_AUDIT_TARGET_TYPES:
+        raise AppException(f"Invalid target_type filter: {target_type}", status_code=422)
+
+    page = max(1, page)
+    page_size = max(1, min(page_size, 100))
+    start = (page - 1) * page_size
+    end = start + page_size - 1
+
+    admin = get_supabase_admin()
+    count_query = admin.table("admin_audit_logs").select("id", count="exact")
+    list_query = admin.table("admin_audit_logs").select("*").order("created_at", desc=True).range(start, end)
+
+    if action:
+        count_query = count_query.eq("action", action)
+        list_query = list_query.eq("action", action)
+    if target_type:
+        count_query = count_query.eq("target_type", target_type)
+        list_query = list_query.eq("target_type", target_type)
+
+    count_result = count_query.execute()
+    rows = list_query.execute().data or []
+
+    # No FK-embed here (unlike some other list endpoints) -- this is the
+    # only table in the codebase that would need a single-column embed
+    # straight to `profiles`, and there's no existing precedent for that
+    # exact shape to copy with confidence. A batch lookup + Python merge
+    # is the same approach already used for cross-table names elsewhere
+    # (see `processing.py`'s pdf-name lookup), just applied here too.
+    admin_ids = sorted({r["admin_id"] for r in rows})
+    admin_names: Dict[str, str] = {}
+    if admin_ids:
+        profile_rows = admin.table("profiles").select("id, full_name").in_("id", admin_ids).execute().data or []
+        admin_names = {p["id"]: p["full_name"] for p in profile_rows}
+
+    items = [
+        AuditLogEntry(
+            id=row["id"],
+            admin_id=row["admin_id"],
+            admin_name=admin_names.get(row["admin_id"], "Unknown"),
+            action=row["action"],
+            target_type=row["target_type"],
+            target_id=row["target_id"],
+            metadata=row.get("metadata") or {},
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+    return ok(
+        data=AuditLogListResponse(items=items, total=count_result.count or 0, page=page, page_size=page_size),
+        message="Audit logs fetched.",
+    )
+>>>>>>> 97283c7 (Admin panel)
