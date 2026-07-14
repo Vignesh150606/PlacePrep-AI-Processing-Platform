@@ -1,6 +1,6 @@
 import type { ISODateString, UUID } from "./common";
 
-export type BookmarkableType = "question" | "interview-experience" | "pdf";
+export type BookmarkableType = "question" | "interview-experience" | "pdf" | "company";
 
 export interface Bookmark {
   id: UUID;

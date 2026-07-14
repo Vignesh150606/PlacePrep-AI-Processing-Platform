@@ -1,47 +1,88 @@
 # PlacePrep Project State
 
-<<<<<<< HEAD
-Last updated: 2026-07-12 (Admin Portal Expansion -- Module 1: Dashboard + Users & Roles)
+Last updated: 2026-07-12 (Phase 6A -- Company Intelligence Hub)
 
 ## This pass, in one paragraph
 
-Sprint 1A cleanup (dead mock files, orphaned `tooltip`/`section-header`
-primitives, one unused dependency -- see `MERGE_NOTES.md`) was followed by
-a full admin-functionality audit before writing anything: read every
-endpoint module, every admin-gated frontend surface, and the schema, to
-find out what genuinely existed versus what the original module list
-assumed existed. Result: Question moderation, upload approval, the AI/OCR/
-processing queue with retry, Calendar management, and Interview Experience
-moderation were all already complete (just scattered across admin-only
-tabs on otherwise-shared pages, with zero central landing page). User
-management and role changes did not exist at all -- promoting/demoting a
-user meant editing `role_id` directly in the Supabase table editor. This
-pass built the first Admin Portal module: a real `/admin` dashboard
-(queue-status stat cards linking out to each existing tool) plus full
-User & Role management (search, filter, paginate, promote/demote), and
-nothing else -- audit trails, storage/AI usage, and persisted error logs
-are separate future passes, not squeezed into this one.
+Phase 6A: turned each company page into the central prep destination the
+Phase 6A brief asked for, by integrating existing modules rather than
+building new ones. Before writing anything, every one of the 11 requested
+sections got checked against the actual backend/frontend to find out what
+already existed vs. what was genuinely missing -- result: 10 of 11
+sections needed zero new backend surface at all, just wiring already-real
+data (Questions, Interview Experiences, Placement Calendar events, PDF
+resources, company directory) into one page. The *only* schema change
+across the whole module was letting a company itself be bookmarked
+(migration `0011`) -- bookmarks never supported `target_type = 'company'`
+before. Eligibility criteria, most-common-topics, difficulty indicators,
+company analytics, FAQs, and related companies are all computed client-side
+from data that other endpoints already return -- none of them are stored
+anywhere new, and none of them show a number that isn't backed by a real
+row somewhere.
 
-## Admin Portal Expansion -- Module 1 detail
-=======
-Last updated: 2026-07-12 (Admin Portal Expansion -- Module 2: Audit Log)
+## Phase 6A -- Company Intelligence Hub detail
 
-## This pass, in one paragraph
+**Per-section reuse breakdown** (the point of doing the audit first):
 
-Module 2 of the Admin Portal Expansion: the audit trail that Module 1
-deliberately deferred. Every admin write across the whole API -- PDF
-approve/reject, question approve/reject/edit/merge/delete, interview
-experience approve/reject/edit/delete, and user role changes -- now logs
-to a new `admin_audit_logs` table via one shared `log_admin_action()`
-helper, and a new `/admin/audit-log` page lets admins filter and page
-through that history. This is a genuinely new table (migration `0010`),
-not a repurposing of the existing `activity_logs` table, because that
-table is a per-user "recent activity" feed rendered on that user's own
-dashboard -- mixing admin actions against *other* users' content into it
-would have been the wrong direction entirely. Storage/AI usage tracking
-and persisted error logs are still separate, un-started future passes.
+| Section | Source | New backend? |
+|---|---|---|
+| Overview | `useCompany()` (already existed) | No |
+| Eligibility criteria | nearest upcoming `/calendar?company_id=` event's `eligibility` field | No |
+| Upcoming placement events | `usePlacementEvents({ companyId })` (already existed) | No |
+| Interview Experiences | `useInterviewExperiences({ companyId })` (already existed) | No |
+| Question Bank filtered by company | `useQuestions()` + client filter (same as before) | No |
+| Most common topics | `question.topic` + `experience.keyTopics`, aggregated client-side | No |
+| Preparation resources | `usePdfs()` + client filter on `companyId`/`processingStatus` | No |
+| Analytics | difficulty/outcome distributions computed from the two lists above | No |
+| Difficulty indicators | same computation, `DifficultyBadge` + a progress-bar idiom copied from `analytics-page.tsx`'s existing coverage bars | No |
+| FAQs | derived Q&A from company fields + the aggregations above (nothing shown without a real number behind it) | No |
+| Related companies | `useCompanies()` (already existed), scored by shared industry/tier | No |
+| Bookmark support | `useBookmarks()` (already existed) | **Yes -- migration 0011** |
 
-## Admin Portal Expansion -- Module 2 detail
+**The one schema change:** `supabase/migrations/0011_phase6a_company_bookmarks.sql`
+extends `bookmarks`' `target_type` check constraint to add `'company'`.
+RLS didn't need touching -- `bookmarks_all_own` was already generic over
+`user_id`, not `target_type`. `bookmarks.py` gained one line
+(`"company"` added to `_VALID_TARGET_TYPES`); no new endpoint.
+
+**Reused, not duplicated:** `EventRow` (from `placement-calendar-page.tsx`)
+and `ExperienceCard`/`SubmissionDialog` (from `interview-experiences-page.tsx`)
+are now both exported and rendered directly on the company page --
+`EventRow` read-only there (`isAdmin` forced `false`, no-op edit/delete
+callbacks) rather than pulling the full admin edit-dialog machinery onto
+what's meant to be a student-facing page. `CompanyCard` (from
+`companies-page.tsx`) is reused as-is for Related Companies. `ROUND_TYPE_LABELS`/
+`OUTCOME_VARIANT` moved out of `interview-experiences-page.tsx` into a new
+`client/src/lib/interview-labels.ts` so both pages import the same
+mapping instead of duplicating it (and so exporting them doesn't trip the
+react-refresh "only export components" lint rule on a page file).
+
+**Caught during implementation, not after:** the first draft called two
+`useMemo`s (`topicCounts`, `outcomeCounts`) *after* the component's
+loading/error early-returns -- a Rules of Hooks violation oxlint caught
+immediately (`react-hooks/rules-of-hooks`, 2 errors). Fixed by moving all
+hook calls (the two `useMemo`s, plus the `questions` filter that feeds
+them) above the early returns, using `company?.id` optional chaining
+since `company` isn't confirmed non-null until after those returns.
+
+**Verified:** `pnpm typecheck` (shared + client), `pnpm lint` (oxlint, 0
+errors -- same 1 pre-existing unrelated `main.tsx` warning as always,
+confirmed it's still the only one), `pnpm build`, `ruff check`, and a live
+boot of `app.main` confirming route count is unchanged at 58 (this module
+added zero new routes, by design). Routing: `/companies/$slug` still
+resolves to `CompanyDetailPage` unchanged; no circular imports between
+`company-detail-page.tsx` and the two pages it now imports from (verified
+by grep + the build succeeding).
+
+**Not done, per the brief:** Alumni Network and Community are explicitly
+out of scope for this pass. Company profile fields (eligibility as a
+standing company attribute, rather than derived per-event) would need an
+admin-facing company-editing UI, which doesn't exist yet (`companies.py`
+has never had a create/update endpoint) -- not built here since it wasn't
+one of the 11 requested sections and the per-event derivation already
+covers the ask.
+
+## Admin Portal Expansion -- Module 2 detail (previous pass)
 
 **New migration**, `supabase/migrations/0010_admin_portal_audit_logs.sql`:
 `admin_audit_logs` table (12-action CHECK constraint covering every admin
@@ -99,7 +140,6 @@ else (schema shape, RLS policy, index names) was checked by hand against
 migrations `0001`/`0002`/`0009`'s exact conventions rather than assumed.
 
 ## Admin Portal Expansion -- Module 1 detail (previous pass)
->>>>>>> 97283c7 (Admin panel)
 
 **New backend module**, `server/app/api/v1/endpoints/admin.py`, mounted at
 `/admin` (3 routes, `require_admin`-gated, no schema migration needed --

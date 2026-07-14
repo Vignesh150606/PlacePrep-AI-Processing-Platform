@@ -394,7 +394,11 @@ function EventMeta({ event }: { event: CalendarEvent }) {
   );
 }
 
-function EventRow({
+// Exported for reuse by company-detail-page.tsx's "Upcoming events" section
+// (read-only there -- isAdmin is always passed false so the edit/delete
+// buttons never render, rather than bringing the full edit-dialog
+// machinery onto what's meant to be a student-facing prep page).
+export function EventRow({
   event,
   isAdmin,
   onEdit,

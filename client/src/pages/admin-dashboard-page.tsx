@@ -291,13 +291,6 @@ function UsersTable() {
 export function AdminDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
-<<<<<<< HEAD
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">Admin Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Everything waiting on you, plus user &amp; role management.
-        </p>
-=======
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Admin Dashboard</h1>
@@ -310,7 +303,6 @@ export function AdminDashboardPage() {
             View audit log
           </Button>
         </Link>
->>>>>>> 97283c7 (Admin panel)
       </div>
       <SummaryCards />
       <UsersTable />

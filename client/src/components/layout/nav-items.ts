@@ -14,10 +14,7 @@ import {
   BarChart3,
   ShieldCheck,
   Gauge,
-<<<<<<< HEAD
-=======
   ScrollText,
->>>>>>> 97283c7 (Admin panel)
   type LucideIcon,
 } from "lucide-react";
 
@@ -70,10 +67,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Dashboard", href: "/admin", icon: Gauge, adminOnly: true },
       { label: "Review Queue", href: "/admin/review", icon: ShieldCheck, adminOnly: true },
-<<<<<<< HEAD
-=======
       { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText, adminOnly: true },
->>>>>>> 97283c7 (Admin panel)
     ],
   },
   {

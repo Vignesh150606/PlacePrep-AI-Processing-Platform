@@ -2,6 +2,11 @@
 Bookmarks endpoints (Module 5). The `bookmarks` table and its RLS policies
 already existed (migration 0002_sprint3_rls_storage.sql) -- this was purely a
 missing endpoint.
+
+Phase 6A: `target_type` gained `"company"` (migration 0011) so the Company
+Intelligence Hub can bookmark a company itself, same as it already could
+for a question/experience/pdf. No other change needed here -- this
+endpoint was already generic over target_type.
 """
 from typing import List
 
@@ -15,7 +20,7 @@ from app.core.supabase_client import get_supabase_admin
 
 router = APIRouter()
 
-_VALID_TARGET_TYPES = {"question", "interview-experience", "pdf"}
+_VALID_TARGET_TYPES = {"question", "interview-experience", "pdf", "company"}
 
 
 class BookmarkResponse(CamelModel):

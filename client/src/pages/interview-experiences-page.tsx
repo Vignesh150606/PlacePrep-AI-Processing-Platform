@@ -19,7 +19,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { EmploymentType, InterviewExperience, InterviewRoundType } from "@placeprep/shared";
+import type { EmploymentType, InterviewExperience } from "@placeprep/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge, DifficultyBadge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ROUND_TYPE_LABELS, OUTCOME_VARIANT } from "@/lib/interview-labels";
 import { useIsAdmin } from "@/hooks/use-profile";
 import { useProfile } from "@/hooks/use-profile";
 import { useCompanies } from "@/hooks/use-companies";
@@ -48,24 +49,9 @@ import {
 } from "@/hooks/use-interview-experiences";
 import { ApiError } from "@/lib/api-client";
 
-const ROUND_TYPE_LABELS: Record<InterviewRoundType, string> = {
-  "online-assessment": "Online Assessment",
-  technical: "Technical",
-  hr: "HR",
-  managerial: "Managerial",
-  "group-discussion": "Group Discussion",
-};
-
 const EMPLOYMENT_LABELS: Record<EmploymentType, string> = {
   internship: "Internship",
   "full-time": "Full-time",
-};
-
-const OUTCOME_VARIANT: Record<string, "correct" | "incorrect" | "warning" | "neutral"> = {
-  selected: "correct",
-  rejected: "incorrect",
-  "in-progress": "warning",
-  withdrawn: "neutral",
 };
 
 const selectClass =
