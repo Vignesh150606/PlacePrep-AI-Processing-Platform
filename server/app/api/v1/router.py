@@ -6,8 +6,10 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     admin,
+    alumni,
     bookmarks,
     calendar,
+    community,
     companies,
     daily_challenge,
     health,
@@ -18,7 +20,10 @@ from app.api.v1.endpoints import (
     profiles,
     questions,
     quizzes,
+    resources,
     search,
+    subjects,
+    topics,
 )
 
 api_router = APIRouter()
@@ -38,3 +43,8 @@ api_router.include_router(calendar.router, prefix="/calendar", tags=["Placement 
 api_router.include_router(
     interview_experiences.router, prefix="/interview-experiences", tags=["Interview Experiences"]
 )
+api_router.include_router(subjects.router, prefix="/subjects", tags=["Subjects"])
+api_router.include_router(topics.router, prefix="/topics", tags=["Topics"])
+api_router.include_router(resources.router, prefix="/resources", tags=["Resources"])
+api_router.include_router(alumni.router, prefix="/alumni", tags=["Alumni"])
+api_router.include_router(community.router, prefix="/community", tags=["Community"])

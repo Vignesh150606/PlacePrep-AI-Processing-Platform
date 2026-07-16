@@ -17,6 +17,13 @@ import { CompanyDetailPage } from "@/pages/company-detail-page";
 import { PdfLibraryPage } from "@/pages/pdf-library-page";
 import { PlacementCalendarPage } from "@/pages/placement-calendar-page";
 import { InterviewExperiencesPage } from "@/pages/interview-experiences-page";
+import { ResourceLibraryPage } from "@/pages/resource-library-page";
+import { AdminResourcesPage } from "@/pages/admin-resources-page";
+import { AlumniDirectoryPage } from "@/pages/alumni-directory-page";
+import { AdminAlumniPage } from "@/pages/admin-alumni-page";
+import { CommunityPage } from "@/pages/community-page";
+import { CommunityPostDetailPage } from "@/pages/community-post-detail-page";
+import { AdminCommunityPage } from "@/pages/admin-community-page";
 import { WrongAnswersPage } from "@/pages/wrong-answers-page";
 import { BookmarksPage } from "@/pages/bookmarks-page";
 import { AnalyticsPage } from "@/pages/analytics-page";
@@ -107,10 +114,42 @@ const experiencesRoute = createRoute({
   component: InterviewExperiencesPage,
 });
 
+// NEW (Phase 10): the Resource Intelligence Hub. Not gated at the route
+// level -- the backend already scopes visibility (non-admins only ever
+// see approved resources plus their own), same pattern as every other
+// moderated-content route in this app.
+const resourcesRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/resources",
+  component: ResourceLibraryPage,
+});
+
+// MODIFIED (Phase 12): was a ComingSoonPage stub -- now the real
+// Placement Community. Not gated at the route level, same "backend
+// already scopes visibility" pattern resourcesRoute/alumniRoute use
+// (posts are visible to every signed-in user; community.py enforces
+// author/admin-only writes).
 const communityRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/community",
-  component: () => <ComingSoonPage title="Community" />,
+  component: CommunityPage,
+});
+
+const communityPostDetailRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/community/$postId",
+  component: CommunityPostDetailPage,
+});
+
+// NEW (Phase 11): the Alumni Intelligence Network. A structured directory,
+// deliberately separate from `communityRoute` above -- per the brief,
+// Community/Messaging/full Mentorship stay out of scope this pass. Not
+// gated at the route level, same "backend already scopes visibility"
+// pattern `resourcesRoute` uses above.
+const alumniRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/alumni",
+  component: AlumniDirectoryPage,
 });
 
 // MODIFIED (Phase 8): was a ComingSoonPage stub — now the real Placement Calendar.
@@ -169,9 +208,34 @@ const adminAuditLogRoute = createRoute({
   component: AdminAuditLogPage,
 });
 
-// MODIFIED (Sprint 1A): was a ComingSoonPage stub — now the real
-// Notifications page. Follows the same conversion pattern as Bookmarks
-// (Module 5) and Wrong Answers (Module 4) above.
+// NEW (Phase 10). Same not-gated-at-the-route-level pattern as
+// adminReviewRoute/adminAuditLogRoute above -- "Pending Resources" lives
+// at its own path (mirrors how Question Bank moderation gets its own
+// /admin/review instead of living inside the dashboard), still part of
+// the Admin Portal, not a separate admin system.
+const adminResourcesRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/admin/resources",
+  component: AdminResourcesPage,
+});
+
+// NEW (Phase 11). Same not-gated-at-the-route-level pattern as
+// adminResourcesRoute above -- "Pending Alumni Verification" gets its own
+// path, still part of the existing Admin Portal.
+const adminAlumniRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/admin/alumni",
+  component: AdminAlumniPage,
+});
+
+// NEW (Phase 12). Same not-gated-at-the-route-level pattern as
+// adminResourcesRoute/adminAlumniRoute above -- "Community Moderation"
+// gets its own path, still part of the existing Admin Portal.
+const adminCommunityRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/admin/community",
+  component: AdminCommunityPage,
+});
 const notificationsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/notifications",
@@ -200,7 +264,10 @@ const routeTree = rootRoute.addChildren([
     companyDetailRoute,
     pdfsRoute,
     experiencesRoute,
+    resourcesRoute,
+    alumniRoute,
     communityRoute,
+    communityPostDetailRoute,
     calendarRoute,
     bookmarksRoute,
     wrongAnswersRoute,
@@ -208,6 +275,9 @@ const routeTree = rootRoute.addChildren([
     adminDashboardRoute,
     adminReviewRoute,
     adminAuditLogRoute,
+    adminResourcesRoute,
+    adminAlumniRoute,
+    adminCommunityRoute,
     notificationsRoute,
     settingsRoute,
     notFoundRoute,

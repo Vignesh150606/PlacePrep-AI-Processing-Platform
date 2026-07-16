@@ -21,7 +21,7 @@ from typing import Any, Dict, Optional
 from app.core.supabase_client import get_supabase_admin
 
 AuditAction = str
-AuditTargetType = str  # "pdf" | "question" | "interview-experience" | "user"
+AuditTargetType = str  # "pdf" | "question" | "interview-experience" | "user" | "resource"
 
 
 def log_admin_action(

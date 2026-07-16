@@ -17,3 +17,6 @@ export * from "./file-upload";
 export * from "./api-response";
 export * from "./daily-challenge";
 export * from "./search";
+export * from "./resource";
+export * from "./alumni";
+export * from "./community";

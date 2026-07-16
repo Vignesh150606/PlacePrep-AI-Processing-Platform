@@ -6,7 +6,10 @@ export interface AdminDashboardSummary {
   pendingPdfApprovals: number;
   pendingQuestionReviews: number;
   pendingInterviewReviews: number;
+  pendingResourceReviews: number;
+  pendingAlumniVerifications: number;
   reportedExperienceCount: number;
+  reportedCommunityContentCount: number;
   failedProcessingJobs: number;
   totalUsers: number;
   totalAdmins: number;
@@ -71,9 +74,23 @@ export type AuditAction =
   | "interview-experience-rejected"
   | "interview-experience-edited"
   | "interview-experience-deleted"
-  | "user-role-changed";
+  | "user-role-changed"
+  | "resource-approved"
+  | "resource-rejected"
+  | "resource-edited"
+  | "resource-deleted"
+  | "resource-bulk-approved"
+  | "resource-bulk-rejected"
+  | "resource-bulk-deleted"
+  | "alumni-verified"
+  | "alumni-rejected"
+  | "alumni-edited"
+  | "alumni-suspended"
+  | "alumni-verification-removed"
+  | "alumni-deleted"
+  | "alumni-manual-created";
 
-export type AuditTargetType = "pdf" | "question" | "interview-experience" | "user";
+export type AuditTargetType = "pdf" | "question" | "interview-experience" | "user" | "resource" | "alumni";
 
 export interface AuditLogEntry {
   id: string;

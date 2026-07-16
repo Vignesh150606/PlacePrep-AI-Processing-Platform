@@ -8,10 +8,14 @@ import {
   ClipboardCheck,
   ExternalLink,
   FileStack,
+  GraduationCap,
   HelpCircle,
   Layers,
+  Library,
   MessageSquare,
+  MessagesSquare,
   Network,
+  Plus,
 } from "lucide-react";
 import type { DifficultyLevel, InterviewExperience } from "@placeprep/shared";
 import { useCompany, useCompanies } from "@/hooks/use-companies";
@@ -19,6 +23,9 @@ import { useQuestions } from "@/hooks/use-questions";
 import { useInterviewExperiences } from "@/hooks/use-interview-experiences";
 import { usePlacementEvents } from "@/hooks/use-calendar";
 import { usePdfs } from "@/hooks/use-pdfs";
+import { useResources } from "@/hooks/use-resources";
+import { useAlumni } from "@/hooks/use-alumni";
+import { useCommunityPosts } from "@/hooks/use-community";
 import { useBookmarks } from "@/hooks/use-bookmarks";
 import { useIsAdmin } from "@/hooks/use-profile";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,6 +34,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { QuestionCard } from "@/components/questions/question-card";
+import { ResourceCard } from "@/components/resources/resource-card";
+import { AlumniCard } from "@/components/alumni/alumni-card";
+import { CommunityPostCard } from "@/components/community/community-post-card";
+import { CommunityPostComposerDialog } from "@/components/community/community-post-composer-dialog";
 import { CompanyCard } from "@/components/companies/company-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -157,6 +168,61 @@ export function CompanyDetailPage() {
       ),
     [pdfData, company?.id],
   );
+
+  // Phase 10: Resource Intelligence Hub, filtered to this company and
+  // already approved -- reuses the exact same `useResources` /
+  // `ResourceCard` the Resource Library page itself uses, not a parallel
+  // implementation. Covers cheat sheets, formula sheets, roadmaps,
+  // previous papers, external links, and videos tagged to this company,
+  // distinct from the PDF-pipeline-derived `resources` list above.
+  const { data: libraryResourceData } = useResources({
+    companyId: company?.id,
+    status: "approved",
+    pageSize: 100,
+  });
+  const libraryResources = React.useMemo(() => libraryResourceData?.items ?? [], [libraryResourceData]);
+
+  // NEW (Phase 11): Alumni Intelligence Network -- verified alumni working
+  // at this company, reusing the exact same `useAlumni` / `AlumniCard` the
+  // Alumni Directory page itself uses (same "not a parallel implementation"
+  // reasoning the Resource Library integration above already established).
+  const { data: companyAlumniData } = useAlumni({
+    companyId: company?.id,
+    status: "verified",
+    pageSize: 100,
+  });
+  const companyAlumni = React.useMemo(() => companyAlumniData?.items ?? [], [companyAlumniData]);
+
+  // NEW (Phase 12): Placement Community -- discussions tagged to this
+  // company, reusing the exact same `useCommunityPosts` / `CommunityPostCard`
+  // the Community page itself uses (same "not a parallel implementation"
+  // reasoning the Resources/Alumni integrations above already established).
+  // The brief asks for "Most useful" / "Interview" / "Preparation" quick
+  // views on top of the plain discussion list -- implemented as filter
+  // chips over the one shared query rather than three separate fetches.
+  const [communityQuickFilter, setCommunityQuickFilter] = React.useState<
+    "all" | "most-useful" | "interview" | "preparation"
+  >("all");
+  const [communityComposerOpen, setCommunityComposerOpen] = React.useState(false);
+  const { data: communityPostData } = useCommunityPosts({
+    companyId: company?.id,
+    sortBy: communityQuickFilter === "most-useful" ? "most-helpful" : "newest",
+    pageSize: 50,
+  });
+  const communityPosts = React.useMemo(() => {
+    const items = communityPostData?.items ?? [];
+    if (communityQuickFilter === "interview") {
+      return items.filter((p) => p.category === "hr-interview" || p.category === "technical-interview");
+    }
+    if (communityQuickFilter === "preparation") {
+      return items.filter((p) =>
+        ["general-placement", "aptitude", "dsa", "core-subjects", "resume-review", "mock-interview"].includes(
+          p.category,
+        ),
+      );
+    }
+    return items;
+  }, [communityPostData, communityQuickFilter]);
 
   const questions = React.useMemo(
     () => (questionData?.items ?? []).filter((q) => q.companyId === company?.id),
@@ -393,7 +459,9 @@ export function CompanyDetailPage() {
           <TabsTrigger value="questions">Questions ({questions.length})</TabsTrigger>
           <TabsTrigger value="experiences">Experiences ({approvedExperiences.length})</TabsTrigger>
           <TabsTrigger value="topics">Topics ({topicCounts.length})</TabsTrigger>
-          <TabsTrigger value="resources">Resources ({resources.length})</TabsTrigger>
+          <TabsTrigger value="resources">Resources ({resources.length + libraryResources.length})</TabsTrigger>
+          <TabsTrigger value="alumni">Alumni ({companyAlumni.length})</TabsTrigger>
+          <TabsTrigger value="community">Community ({communityPosts.length})</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
@@ -463,34 +531,136 @@ export function CompanyDetailPage() {
         </TabsContent>
 
         <TabsContent value="resources">
-          {resources.length === 0 ? (
+          {resources.length === 0 && libraryResources.length === 0 ? (
             <EmptyState
               icon={FileStack}
               title="No preparation resources yet"
-              description="PDFs uploaded and processed for this company will show up here."
+              description="PDFs, cheat sheets, roadmaps, and links shared for this company will show up here."
             />
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {resources.map((pdf) => (
-                <Card key={pdf.id} className="flex flex-col gap-2 p-4">
-                  <p className="font-medium text-foreground">{pdf.title || pdf.fileName}</p>
-                  {pdf.description && <p className="text-sm text-muted-foreground">{pdf.description}</p>}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      {formatBytes(pdf.fileSizeBytes)} · {pdf.extractedQuestionCount} questions extracted
-                    </span>
-                    {pdf.storageUrl && (
-                      <Button asChild variant="ghost" size="sm">
-                        <a href={pdf.storageUrl} target="_blank" rel="noreferrer">
-                          Open <ExternalLink className="size-3.5" />
-                        </a>
-                      </Button>
-                    )}
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-3">
+                <h3 className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <FileStack className="size-4" /> Preparation PDFs
+                </h3>
+                {resources.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No processed PDFs for this company yet.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {resources.map((pdf) => (
+                      <Card key={pdf.id} className="flex flex-col gap-2 p-4">
+                        <p className="font-medium text-foreground">{pdf.title || pdf.fileName}</p>
+                        {pdf.description && <p className="text-sm text-muted-foreground">{pdf.description}</p>}
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>
+                            {formatBytes(pdf.fileSizeBytes)} · {pdf.extractedQuestionCount} questions extracted
+                          </span>
+                          {pdf.storageUrl && (
+                            <Button asChild variant="ghost" size="sm">
+                              <a href={pdf.storageUrl} target="_blank" rel="noreferrer">
+                                Open <ExternalLink className="size-3.5" />
+                              </a>
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    ))}
                   </div>
-                </Card>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <h3 className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Library className="size-4" /> Resource Library
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Cheat sheets, formula sheets, roadmaps, previous papers, external links, and videos shared
+                  by students for {company.name}.
+                </p>
+                {libraryResources.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No resources submitted for this company yet.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    {libraryResources.map((resource) => (
+                      <ResourceCard
+                        key={resource.id}
+                        resource={resource}
+                        isBookmarked={isBookmarked(resource.id)}
+                        onToggleBookmark={(id) => toggle(id, "resource")}
+                        hideCompanyBadge
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="alumni">
+          {companyAlumni.length === 0 ? (
+            <EmptyState
+              icon={GraduationCap}
+              title="No verified alumni yet"
+              description={`Once alumni from ${company.name} are verified, they'll appear here with their roles, graduation year, and shared experiences.`}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {companyAlumni.map((alumnus) => (
+                <AlumniCard key={alumnus.id} alumni={alumnus} hideCompanyBadge />
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="community">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["all", "All"],
+                    ["most-useful", "Most useful"],
+                    ["interview", "Interview discussions"],
+                    ["preparation", "Preparation discussions"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <Button
+                    key={value}
+                    variant={communityQuickFilter === value ? "primary" : "secondary"}
+                    size="sm"
+                    onClick={() => setCommunityQuickFilter(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+              <Button size="sm" onClick={() => setCommunityComposerOpen(true)}>
+                <Plus className="size-4" /> Start a discussion
+              </Button>
+            </div>
+
+            {communityPosts.length === 0 ? (
+              <EmptyState
+                icon={MessagesSquare}
+                title="No discussions yet"
+                description={`Be the first to ask a doubt or share an experience about ${company.name}.`}
+                action={
+                  <Button size="sm" onClick={() => setCommunityComposerOpen(true)}>
+                    <Plus className="size-4" /> Start a discussion
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="flex flex-col gap-4">
+                {communityPosts.map((post) => (
+                  <CommunityPostCard key={post.id} post={post} hideCompanyBadge />
+                ))}
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="analytics">
@@ -614,6 +784,12 @@ export function CompanyDetailPage() {
       )}
 
       <SubmissionDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editingExperience} />
+      <CommunityPostComposerDialog
+        open={communityComposerOpen}
+        onOpenChange={setCommunityComposerOpen}
+        defaultCompanyId={company.id}
+        defaultCompanyName={company.name}
+      />
     </div>
   );
 }

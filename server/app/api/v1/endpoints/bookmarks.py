@@ -7,6 +7,16 @@ Phase 6A: `target_type` gained `"company"` (migration 0011) so the Company
 Intelligence Hub can bookmark a company itself, same as it already could
 for a question/experience/pdf. No other change needed here -- this
 endpoint was already generic over target_type.
+
+Phase 10: `target_type` gained `"resource"` (migration 0012) for the
+Resource Intelligence Hub. Note that unlike other target types,
+`resources.bookmark_count` is a real, trigger-maintained denormalized
+count (see that migration's docstring) -- this endpoint still doesn't need
+to know that; the trigger lives entirely in the database.
+
+Phase 12: `target_type` gained `"community-post"` (migration 0014) for the
+Placement Community -- same "no endpoint change needed" story, this
+module was already generic over target_type.
 """
 from typing import List
 
@@ -20,7 +30,7 @@ from app.core.supabase_client import get_supabase_admin
 
 router = APIRouter()
 
-_VALID_TARGET_TYPES = {"question", "interview-experience", "pdf", "company"}
+_VALID_TARGET_TYPES = {"question", "interview-experience", "pdf", "company", "resource", "community-post"}
 
 
 class BookmarkResponse(CamelModel):

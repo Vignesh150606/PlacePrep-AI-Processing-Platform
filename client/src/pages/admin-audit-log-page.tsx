@@ -26,9 +26,23 @@ const ACTIONS: AuditAction[] = [
   "interview-experience-edited",
   "interview-experience-deleted",
   "user-role-changed",
+  "resource-approved",
+  "resource-rejected",
+  "resource-edited",
+  "resource-deleted",
+  "resource-bulk-approved",
+  "resource-bulk-rejected",
+  "resource-bulk-deleted",
+  "alumni-verified",
+  "alumni-rejected",
+  "alumni-edited",
+  "alumni-suspended",
+  "alumni-verification-removed",
+  "alumni-deleted",
+  "alumni-manual-created",
 ];
 
-const TARGET_TYPES: AuditTargetType[] = ["pdf", "question", "interview-experience", "user"];
+const TARGET_TYPES: AuditTargetType[] = ["pdf", "question", "interview-experience", "user", "resource", "alumni"];
 
 const ACTION_LABELS: Record<AuditAction, string> = {
   "pdf-approved": "Approved a PDF upload",
@@ -43,6 +57,20 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "interview-experience-edited": "Edited an interview experience",
   "interview-experience-deleted": "Deleted an interview experience",
   "user-role-changed": "Changed a user's role",
+  "resource-approved": "Approved a resource",
+  "resource-rejected": "Rejected a resource",
+  "resource-edited": "Edited a resource",
+  "resource-deleted": "Deleted a resource",
+  "resource-bulk-approved": "Bulk-approved resources",
+  "resource-bulk-rejected": "Bulk-rejected resources",
+  "resource-bulk-deleted": "Bulk-deleted resources",
+  "alumni-verified": "Verified an alumnus",
+  "alumni-rejected": "Rejected an alumni request",
+  "alumni-edited": "Edited an alumni profile",
+  "alumni-suspended": "Suspended an alumnus",
+  "alumni-verification-removed": "Removed an alumnus's verification",
+  "alumni-deleted": "Deleted an alumni profile",
+  "alumni-manual-created": "Manually verified an alumnus",
 };
 
 const ACTION_BADGE_VARIANT: Record<AuditAction, "correct" | "incorrect" | "accent" | "warning" | "neutral"> = {
@@ -58,6 +86,20 @@ const ACTION_BADGE_VARIANT: Record<AuditAction, "correct" | "incorrect" | "accen
   "interview-experience-edited": "accent",
   "interview-experience-deleted": "incorrect",
   "user-role-changed": "warning",
+  "resource-approved": "correct",
+  "resource-rejected": "incorrect",
+  "resource-edited": "accent",
+  "resource-deleted": "incorrect",
+  "resource-bulk-approved": "correct",
+  "resource-bulk-rejected": "incorrect",
+  "resource-bulk-deleted": "incorrect",
+  "alumni-verified": "correct",
+  "alumni-rejected": "incorrect",
+  "alumni-edited": "accent",
+  "alumni-suspended": "warning",
+  "alumni-verification-removed": "warning",
+  "alumni-deleted": "incorrect",
+  "alumni-manual-created": "correct",
 };
 
 const TARGET_LINK: Record<AuditTargetType, string | undefined> = {
@@ -65,6 +107,8 @@ const TARGET_LINK: Record<AuditTargetType, string | undefined> = {
   question: "/admin/review",
   "interview-experience": "/experiences",
   user: "/admin",
+  resource: "/admin/resources",
+  alumni: "/admin/alumni",
 };
 
 function formatDateTime(iso: string): string {

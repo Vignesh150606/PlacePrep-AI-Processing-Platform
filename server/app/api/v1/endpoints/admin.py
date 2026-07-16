@@ -20,6 +20,15 @@ count-per-status query style).
 
 Still deliberately NOT built here (separate, larger passes -- see
 PROJECT_STATE.md): storage/AI usage tracking and persisted error logs.
+
+Phase 10: dashboard summary gained `pending_resource_reviews`, and the
+audit target-type/action check constraints (migration 0012) gained
+`"resource"` and the resource-specific actions -- the actual "Pending
+Resources" moderation queue lives in `resources.py` (its own router,
+mounted at `/resources`, not `/admin/resources`) plus a dedicated
+`AdminResourcesPage` on the frontend, the same "own page, still part of
+the Admin Portal" shape `/admin/review` already established for Question
+Bank moderation -- not a second admin system.
 """
 from typing import Any, Dict, List, Optional
 
@@ -37,14 +46,20 @@ router = APIRouter()
 _ROLE_NAMES = {1: "student", 2: "alumni", 3: "admin"}
 _ROLE_IDS = {name: role_id for role_id, name in _ROLE_NAMES.items()}
 _VALID_ROLES = tuple(_ROLE_IDS.keys())
-_VALID_AUDIT_TARGET_TYPES = ("pdf", "question", "interview-experience", "user")
+_VALID_AUDIT_TARGET_TYPES = (
+    "pdf", "question", "interview-experience", "user", "resource", "alumni",
+    "community-post", "community-comment",
+)
 
 
 class DashboardSummary(CamelModel):
     pending_pdf_approvals: int
     pending_question_reviews: int
     pending_interview_reviews: int
+    pending_resource_reviews: int
+    pending_alumni_verifications: int
     reported_experience_count: int
+    reported_community_content_count: int
     failed_processing_jobs: int
     total_users: int
     total_admins: int
@@ -106,6 +121,12 @@ async def get_dashboard_summary(_admin: CurrentUser = Depends(require_admin)):
         .eq("status", "pending-review")
         .execute()
     )
+    pending_resources = (
+        admin.table("resources").select("id", count="exact").eq("status", "pending-review").execute()
+    )
+    pending_alumni = (
+        admin.table("alumni_profiles").select("id", count="exact").eq("verification_status", "pending-review").execute()
+    )
     failed_jobs = admin.table("processing_jobs").select("id", count="exact").eq("status", "failed").execute()
     total_users = admin.table("profiles").select("id", count="exact").execute()
     total_admins = admin.table("profiles").select("id", count="exact").eq("role_id", 3).execute()
@@ -116,11 +137,25 @@ async def get_dashboard_summary(_admin: CurrentUser = Depends(require_admin)):
     report_rows = admin.table("interview_experience_reports").select("experience_id").execute().data or []
     reported_count = len({r["experience_id"] for r in report_rows})
 
+    # Phase 12: same "small table, Python de-dupe" approach as the
+    # interview-experience reports above -- reported posts + reported
+    # comments, de-duped by their own id (not summed report rows).
+    community_post_report_rows = admin.table("community_post_reports").select("post_id").execute().data or []
+    community_comment_report_rows = (
+        admin.table("community_comment_reports").select("comment_id").execute().data or []
+    )
+    reported_community_count = len({r["post_id"] for r in community_post_report_rows}) + len(
+        {r["comment_id"] for r in community_comment_report_rows}
+    )
+
     summary = DashboardSummary(
         pending_pdf_approvals=pending_pdfs.count or 0,
         pending_question_reviews=pending_questions.count or 0,
         pending_interview_reviews=pending_experiences.count or 0,
+        pending_resource_reviews=pending_resources.count or 0,
+        pending_alumni_verifications=pending_alumni.count or 0,
         reported_experience_count=reported_count,
+        reported_community_content_count=reported_community_count,
         failed_processing_jobs=failed_jobs.count or 0,
         total_users=total_users.count or 0,
         total_admins=total_admins.count or 0,

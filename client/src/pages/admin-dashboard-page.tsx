@@ -5,6 +5,8 @@ import {
   ChevronRight,
   FileStack,
   Flag,
+  GraduationCap,
+  Library,
   MessagesSquare,
   ShieldCheck,
   Users,
@@ -87,6 +89,30 @@ function SummaryCards() {
         <StatCard
           label="Reported experiences"
           value={data?.reportedExperienceCount ?? 0}
+          icon={Flag}
+          isLoading={isLoading}
+        />
+      </Link>
+      <Link to="/admin/resources">
+        <StatCard
+          label="Pending resource reviews"
+          value={data?.pendingResourceReviews ?? 0}
+          icon={Library}
+          isLoading={isLoading}
+        />
+      </Link>
+      <Link to="/admin/alumni">
+        <StatCard
+          label="Pending alumni verifications"
+          value={data?.pendingAlumniVerifications ?? 0}
+          icon={GraduationCap}
+          isLoading={isLoading}
+        />
+      </Link>
+      <Link to="/admin/community">
+        <StatCard
+          label="Reported community content"
+          value={data?.reportedCommunityContentCount ?? 0}
           icon={Flag}
           isLoading={isLoading}
         />
@@ -285,8 +311,9 @@ function UsersTable() {
  * consolidated admin landing page; previously the only admin-specific route
  * was /admin/review, with everything else scattered across admin-only tabs
  * on otherwise-shared pages. See PROJECT_STATE.md for the full audit this
- * module came out of and what's intentionally deferred (audit trail,
- * storage/AI usage, persisted error logs, community moderation).
+ * module came out of and what's intentionally deferred (audit trail is now
+ * live; storage/AI usage and persisted error logs remain deferred). Community
+ * moderation now lives at /admin/community (Phase 12).
  */
 export function AdminDashboardPage() {
   return (

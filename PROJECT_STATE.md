@@ -1,30 +1,461 @@
 # PlacePrep Project State
 
-
-Last updated: 2026-07-12 (Phase 6A -- Company Intelligence Hub)
+Last updated: 2026-07-16 (Phase 12 -- Placement Community)
 
 ## This pass, in one paragraph
 
-Phase 6A: turned each company page into the central prep destination the
-Phase 6A brief asked for, by integrating existing modules rather than
-building new ones. Before writing anything, every one of the 11 requested
-sections got checked against the actual backend/frontend to find out what
-already existed vs. what was genuinely missing -- result: 10 of 11
-sections needed zero new backend surface at all, just wiring already-real
-data (Questions, Interview Experiences, Placement Calendar events, PDF
-resources, company directory) into one page. The *only* schema change
-across the whole module was letting a company itself be bookmarked
-(migration `0011`) -- bookmarks never supported `target_type = 'company'`
-before. Eligibility criteria, most-common-topics, difficulty indicators,
-company analytics, FAQs, and related companies are all computed client-side
-from data that other endpoints already return -- none of them are stored
-anywhere new, and none of them show a number that isn't backed by a real
-row somewhere.
+Phase 12: built the Placement Community -- a professional discussion
+forum for placement preparation (doubts, OA/company discussions,
+preparation strategies), deliberately NOT social media (no feed algorithm,
+no DMs, no real-time chat). Audited first: the only prior "community"
+infrastructure anywhere in the codebase was a `'community-reply'`
+notification type (reserved, unused, migration 0001) and a nav
+item/route pointed at `ComingSoonPage` -- no tables, no endpoints, no
+components. Reused everything else instead of duplicating it -- the
+existing `profiles` table for identity (same anonymity-redaction shape
+`interview_experiences` established), the existing `companies` table
+(optional FK + denormalized free-text fallback, same shape
+`resources.author` established), the existing generic `bookmarks` table
+(`target_type = 'community-post'`), the existing `admin_audit_logs`/
+`notifications` tables (extended, not replaced), and the existing Admin
+Portal (new page, not a new admin system). Two new tables
+(`community_posts`, `community_comments`) plus vote/report child tables,
+one new endpoint module (`community.py`, 22 routes), and -- per the
+brief's explicit "reuse the Alumni module" instruction -- four new
+triggers that feed Community contributions/helpful-votes into the SAME
+`alumni_profiles.contribution_count`/`helpful_votes_received` counters
+Phase 11 introduced, rather than a second stats system. Deliberately NOT
+a submission queue like `resources`/`interview_experiences`: posts and
+replies are visible immediately (this is a forum), moderation is
+reactive (report -> admin reviews -> pin/lock/delete/suspend). Company
+Hub gained a new Community tab (quick filters: All / Most Useful /
+Interview / Preparation, over the one shared query); Admin Portal gained
+a Community Moderation page (reported posts/replies queue, per-user
+suspension) and a dashboard stat card. Messaging, real-time chat, and
+mentorship scheduling stay out of scope per the brief.
 
-## Phase 6A -- Company Intelligence Hub detail
+## Phase 12 -- Placement Community detail
 
-Last updated: 2026-07-12 (Admin Portal Expansion -- Module 2: Audit Log)
- a0a1ff65d70551a7ab903b3c8381d402d8a276b0
+**What exists (migration 0014, `community.py`, `use-community.ts`,
+`components/community/*`, `community-page.tsx`,
+`community-post-detail-page.tsx`, `admin-community-page.tsx`):**
+
+- `community_posts` -- `author_id` (FK to `profiles`), `is_anonymous`,
+  `category` (12-value check constraint: General Placement, Aptitude,
+  DSA, Core Subjects, HR Interview, Technical Interview, Company
+  Specific, Off Campus, Higher Studies, Resume Review, Mock Interview,
+  Resources), `title`/`description`, optional `company_id` + denormalized
+  `company_name` fallback, `tags text[]`, `attachments jsonb` (up to 4
+  files, reusing the EXISTING `pdfs` storage bucket and the same
+  `{uploader}/{uuid}.ext` path convention `resources.py` uses), and four
+  real, trigger-maintained counters: `view_count` (RPC-incremented, same
+  shape as `increment_resource_downloads`), `helpful_count`/
+  `not_helpful_count` (from `community_post_votes`), `reply_count` (from
+  `community_comments`, powers the "Unanswered" filter as
+  `reply_count = 0` -- a real DB-side filter, not client-side). Plus
+  `is_pinned`/`is_locked` (admin-only moderation flags).
+- `community_comments` -- nested replies via a self-referencing
+  `parent_comment_id`; the backend returns a flat, chronologically
+  ordered list and the frontend (`community-comment-thread.tsx`) builds
+  the tree client-side, same division of labor
+  `interview_experience_rounds` already established. `helpful_count` is
+  likewise a real trigger-maintained column.
+- `community_post_votes` / `community_comment_votes` -- toggle semantics
+  identical to `interview_experience_votes` (vote again with the same
+  type to retract; vote with the other type to switch).
+- `community_post_reports` / `community_comment_reports` -- identical
+  shape to `interview_experience_reports`; report counts are computed
+  fresh per admin request (same "small table, Python de-dupe" approach
+  `admin.py`'s dashboard summary already used for experience reports),
+  not denormalized.
+- `profiles.community_suspended` (+ `_reason`/`_at`/`_by`) -- extends the
+  EXISTING `profiles` table (same reasoning `role_id` already lives
+  there) rather than a new user-status table. Scoped to Community
+  posting privileges specifically, not a site-wide ban -- there's no
+  site-wide suspension concept anywhere else in this codebase to reuse,
+  and inventing one here would be broader than the brief asked for.
+- Alumni integration -- `sync_alumni_contribution_from_community_post`,
+  `sync_alumni_contribution_from_community_comment`,
+  `sync_alumni_helpful_from_community_post_vote`,
+  `sync_alumni_helpful_from_community_comment_vote`: four triggers that
+  feed the EXISTING `alumni_profiles.contribution_count`/
+  `helpful_votes_received` counters Phase 11 introduced. A verified
+  alumnus's post/comment authorship shows a verified badge
+  (`ShieldCheck`) and, where set, a "open to mentoring" indicator --
+  reusing `alumni_profiles.mentorship_available` -- next to their name
+  everywhere in the Community UI.
+- `community.py` (22 routes) -- list/get/create/update/delete posts;
+  pin/lock (admin-only, separate from content-edit `PATCH` so each toggle
+  gets its own audit-log action); vote/report; attachment download
+  (mints a short-lived signed URL, same pattern
+  `resources.py`'s `download_resource` uses); nested comment CRUD +
+  vote/report; admin reported-posts/reported-comments queues + dismiss;
+  user suspend/unsuspend; and `/community/meta/analytics` (deliberately
+  NOT `/community/analytics`, to avoid the exact route-ordering trap
+  `alumni.py`'s docstring calls out between `/{alumni_id}` and a bare
+  `/analytics` -- verified directly against the live route table, not
+  just asserted, see Verification below).
+- Frontend -- `use-community.ts` (every endpoint above, TanStack Query),
+  `community-post-card.tsx`/`community-post-filters.tsx`/
+  `community-post-composer-dialog.tsx` (multipart attachment upload, same
+  `FormData` pattern `use-resources.ts` established)/
+  `community-comment-thread.tsx` (recursive nested rendering), and three
+  pages: `/community` (list + filters + composer), `/community/$postId`
+  (detail + votes/report/bookmark/inline edit/delete + comment thread),
+  `/admin/community` (reported queues + pin/lock/dismiss/suspend). Company
+  Hub's new Community tab and Admin Dashboard's new stat card both reuse
+  these same components/hooks rather than parallel implementations.
+- Bookmarks (`target_type = 'community-post'`) and notifications
+  (`'community-reply'` -- finally used; plus new
+  `'community-post-reported'`/`'community-comment-reported'`/
+  `'community-account-suspended'`) extend the existing generic tables;
+  neither module needed a code change beyond the check-constraint
+  extension (Community wasn't a new concept to either system).
+
+**Deliberately deferred (explicit in the brief):** real-time chat, direct
+messaging, mentorship scheduling/booking. `mentorship_available` (Phase
+11) continues to be display-only.
+
+**Verification (real, not asserted):**
+
+- `pnpm typecheck` (shared, then client) -- clean. One real bug caught
+  and fixed: the post composer cast `category` to the zod schema's
+  `string` field type instead of the shared `CommunityCategory` union;
+  `tsc` correctly rejected the assignment.
+- `pnpm lint` (oxlint) -- 0 errors (one pre-existing, unrelated warning
+  in `main.tsx` about fast-refresh export shape, not touched this pass).
+- `pnpm build` -- production build succeeds (`vite build`, 2892 modules
+  transformed).
+- `ruff check` (server) -- all checks passed.
+- `python -m py_compile` across all 51 server `.py` files -- clean.
+- Live import of `app.main` -- 100 total routes, 22 under `/community`,
+  matching `community.py` route-for-route.
+- OpenAPI schema generation via `TestClient` (`/openapi.json`) -- 200 OK,
+  every Community Pydantic response model resolves cleanly.
+- Route-resolution test (bypassing auth, matching directly against
+  `app.router.routes`) -- specifically targeted the ordering concern
+  called out above: confirmed `GET /community/admin/reported-posts`,
+  `GET /community/admin/reported-comments`, `GET /community/meta/analytics`,
+  `DELETE /community/admin/reported-posts/{id}/dismiss`,
+  `POST /community/admin/users/{id}/suspend` all resolve to their
+  intended handlers and are never shadowed by the `GET/PATCH/DELETE
+  /community/{post_id}` catch-alls, regardless of registration order (the
+  literal second path segment on every admin/meta route -- `reported-posts`,
+  `reported-comments`, `analytics`, `dismiss`, `suspend` -- never
+  collides with a route pattern that expects a different literal there,
+  so this turned out not to be the same trap `alumni.py` hit with its
+  single-segment `/analytics`/`/me`, but it was verified directly rather
+  than assumed safe).
+
+**What could NOT be verified from here:** no live Supabase project to run
+migration 0014 against (same limitation every prior phase has noted) --
+the SQL has been read closely against the existing migrations' exact
+conventions (trigger naming, `security definer set search_path = public`,
+`drop ... if exists` before every `create`) but not executed. Flagged for
+manual application via the Supabase SQL editor, in order, after 0013.
+
+## Phase 11 -- Alumni Intelligence Network detail
+
+**Audit first** (see the migration file's own docstring for the full
+reasoning): grepped every prior migration and every `.py`/`.ts`/`.tsx`
+file for "alumni" -- found exactly one hit, the plain RBAC role. No
+alumni profile model, no verification workflow, no directory, nothing to
+reuse beyond that role id and the identity/companies/moderation/
+audit/notification infrastructure every other content-moderation module
+in this app already shares.
+
+**New migration**, `supabase/migrations/0013_phase11_alumni_intelligence_network.sql`:
+- `alumni_profiles` table -- one row per `profiles.id` (`profile_id uuid
+  unique`), optional `current_company_id` FK + always-populated
+  `current_company_name` free text (same fallback shape `resources.author`
+  established), `job_title` (NOTE: not `current_role` -- `CURRENT_ROLE` is
+  a reserved SQL keyword, so that's a genuine constraint, not a style
+  choice; the API/frontend still call it `currentRole` -- only the actual
+  column name differs, mapped in `alumni.py`), `department`,
+  `graduation_year`, `location`, `skills`/`domains`/`technologies`
+  (`text[]`, GIN-indexed), free-text bio/career-journey/preparation-
+  strategy/resume-tips/interview-tips/placement-advice, `availability_status`
+  (general reachability -- distinct from `mentorship_available`),
+  `linkedin_url`/`portfolio_url`/`github_url`, a future-ready (currently
+  unused, per the brief) `institution_email` column, the verification
+  lifecycle (`verification_status` -- `pending-review`/`verified`/
+  `rejected`/`suspended`, deliberately 'verified' not 'approved' since this
+  is identity verification, not content moderation; `verification_method`
+  -- `self-submitted`/`admin-manual`/`institution-email`;
+  `verified_by`/`verified_at`/`rejection_reason`), and two denormalized,
+  trigger-maintained counters:
+  - `contribution_count` -- real, sortable "Most Contributions". Two new
+    trigger functions (`sync_alumni_contribution_from_experience`/
+    `..._from_resource`) on `interview_experiences`/`resources`
+    (tables this migration doesn't own) recompute it incrementally on
+    every insert/status-change/delete, scoped only to `approved` rows --
+    no full rescan, same "trigger on the other table" shape
+    `sync_resource_bookmark_count` (migration 0012) established.
+  - `helpful_votes_received` -- real, sortable "Most Helpful". A new
+    trigger (`sync_alumni_helpful_votes`) on `interview_experience_votes`
+    handles INSERT/DELETE **and** UPDATE OF `vote_type` -- unlike the
+    bookmark-count trigger, `interview_experiences.py`'s `vote_experience`
+    has a genuine update path (voting the other way replaces the row in
+    place), verified end-to-end against a real local Postgres instance
+    (see "How this pass was verified" below).
+- Extended (not replaced) `admin_audit_logs_action_check` (+
+  `alumni-verified`/`alumni-rejected`/`alumni-edited`/`alumni-suspended`/
+  `alumni-verification-removed`/`alumni-deleted`/`alumni-manual-created`),
+  `admin_audit_logs_target_type_check` (+ `'alumni'`), and
+  `notifications_type_check` (+ `alumni-verification-pending`/
+  `alumni-verified`/`alumni-rejected`/`alumni-suspended`).
+- RLS: select = verified OR own row OR admin; insert = own row OR admin;
+  update = own row OR admin (a verified alumnus can keep their own bio/
+  tips/availability/mentorship flag current without admin involvement for
+  every small edit); delete = admin only. Every real write goes through
+  the service-role client and bypasses RLS regardless (same as every
+  other table in this system) -- these are defense-in-depth, written to
+  match the actual visibility rules `alumni.py` enforces.
+
+**New endpoint module**, `server/app/api/v1/endpoints/alumni.py` (10 routes):
+`GET /alumni` (list -- verified-only for non-admins plus their own profile
+regardless of status; admins can filter by `status` to work the queue;
+filters: search/company/department/graduation-year/domain/skill/
+mentorship; sort: newest/most-helpful/most-contributions), `GET
+/alumni/analytics` (open to any signed-in user -- powers both the public
+directory header and the Admin Alumni page's stats, not duplicated in two
+endpoints), `GET /alumni/me`, `GET /alumni/{id}`, `POST /alumni`
+(self-submission -- always `pending-review`, profile_id forced to the
+caller, never self-promotes), `PATCH /alumni/me` (self-edit, any
+verification status), `PATCH /alumni/{id}` (admin edit), `PATCH
+/alumni/{id}/status` (Approve/Reject/Suspend/Remove Verification, with a
+real state-transition guard -- e.g. you can't "reject" an already-verified
+profile; verifying/suspending/removing-verification is the ONLY codepath
+that ever moves `profiles.role_id`, reusing the exact same role-change
+write `admin.py`'s `update_user_role` performs, not a parallel mechanism),
+`POST /alumni/manual` (admin "Manual verification" -- creates AND
+verifies in one step for a user who can't self-submit), `DELETE
+/alumni/{id}`.
+
+Name/avatar/email are never duplicated onto `alumni_profiles` -- a
+batched `_profiles_for()` lookup reads them from the existing `profiles`
+table per request (this table has TWO foreign keys into `profiles`
+-- `profile_id` and `verified_by` -- so an unqualified PostgREST embed
+would be ambiguous anyway; same reasoning `interview_experiences.py`
+already avoids embedding `profiles` for the identical two-FK reason).
+
+**Admin Portal integration** (extended, not replaced): `admin.py`'s
+`DashboardSummary` gained `pending_alumni_verifications`;
+`_VALID_AUDIT_TARGET_TYPES` gained `'alumni'`. New page `/admin/alumni`
+(`AdminAlumniPage`) -- status-filtered queue, Verify/Reject/Suspend/Remove
+Verification/Edit/Delete per row, a Manual Verification dialog (searches
+existing users via the same `useAdminUsers` the Users & Roles page uses),
+contribution stats. New nav entry "Pending Alumni Verification" and a
+dashboard stat card, both admin-gated the same way every other admin-only
+surface in this app already is.
+
+**Company Hub integration**: `company-detail-page.tsx` gained an Alumni
+tab -- verified alumni at that company, reusing the exact same
+`useAlumni`/`AlumniCard` the Alumni Directory page itself uses (same
+"not a parallel implementation" reasoning the existing Resources tab
+established for Phase 10).
+
+**Frontend**: `shared/src/types/alumni.ts` (new shared types), `use-alumni.ts`
+(hook, mirrors `use-resources.ts`), `alumni-card.tsx`/`alumni-filters.tsx`/
+`alumni-profile-dialog.tsx` (new components), `alumni-directory-page.tsx`
+(`/alumni` -- public directory with an analytics header, deliberately
+routed separately from `/community`'s still-unbuilt stub per the brief),
+`admin-alumni-page.tsx` (`/admin/alumni`).
+
+**Mentorship (foundation only, per the brief)**: a single
+`mentorship_available` boolean on `alumni_profiles`, surfaced as a filter
+and a badge. No chat, scheduling, booking, or notifications table for it
+-- those are explicitly out of scope this pass.
+
+**How this pass was verified** (real, not asserted): `pnpm typecheck`
+(shared, then client) clean; `pnpm lint` (oxlint) clean (one pre-existing,
+unrelated warning in `main.tsx`); `pnpm build` clean; `ruff check .` clean;
+a live Python import of `app.main` confirming route count (68 -> 78, +10
+alumni routes, registered in the correct order -- `/analytics` and `/me`
+before the `/{alumni_id}` catch-all) and `py_compile` across all 50
+server files. Beyond that: installed a throwaway local PostgreSQL 16
+instance, stubbed the minimum of Supabase's managed `auth`/`storage`
+schemas migrations 0001-0012 already depended on, and replayed
+migrations 0001 through 0013 end-to-end against it from empty -- caught a
+real bug this way (`current_role` as a bare column identifier is a syntax
+error, since `CURRENT_ROLE` is a reserved SQL keyword; renamed the column
+to `job_title`, kept the API/frontend-facing field as `currentRole`).
+Then exercised both new triggers with real rows: inserted a pending
+interview experience by a verified alumnus (`contribution_count` correctly
+stayed 0), approved it (`contribution_count` -> 1), cast a "helpful" vote
+(`helpful_votes_received` -> 1), flipped the same vote to "not-helpful"
+(`helpful_votes_received` -> 0, confirming the UPDATE OF `vote_type` path
+works, not just INSERT/DELETE), then rejected the previously-approved
+experience (`contribution_count` -> 0). All five steps produced the
+expected number.
+
+**Deliberately not built this pass** (explicitly out of scope per the
+brief): Community, Messaging, and full Mentorship (chat/scheduling/
+booking/notifications) -- only the foundation flag for the last one.
+Institution-email auto-verification is schema-ready (`institution_email`
+column exists) but not implemented -- no verification logic reads it yet.
+
+## Phase 10 -- Resource Intelligence Hub detail (previous pass)
+
+**Audit first** (see the migration file's own docstring for the full
+reasoning): confirmed via grep across every prior migration that no
+generic `resources` table existed; confirmed `subjects`/`topics` RLS
+(`subjects_select_all`/`topics_select_all`, migration `0002`) had no
+endpoint ever built against it; confirmed `bookmarks`, `admin_audit_logs`,
+and `notifications`' check constraints were the only three schema pieces
+that needed extending (not replacing) to plug a fifth content type in.
+
+**New migration**, `supabase/migrations/0012_phase10_resource_intelligence_hub.sql`:
+- `resources` table -- `category` (13-value CHECK: `company`/`subject`/
+  `topic`/`aptitude`/`technical`/`interview`/`cheat-sheet`/`formula-sheet`/
+  `roadmap`/`previous-paper`/`external-link`/`video`/`pdf-notes`),
+  optional `subject_id`/`topic_id`/`company_id` FKs (any resource can be
+  tagged by any/none of these regardless of its category), optional
+  `difficulty`, `tags text[]`, free-text `author` (distinct from
+  `uploaded_by` -- the submitter is very often not the original creator),
+  `file_storage_path`/`file_name`/`file_size_bytes`/`file_kind` OR
+  `external_url` (a `resources_has_content` CHECK requires at least one),
+  `version int` (real edit-revision counter, only bumped by
+  `update_resource` when a field actually changes), the standard
+  `pending-review`/`approved`/`rejected` `status` lifecycle plus
+  `reviewed_by`/`reviewed_at`/`rejection_reason`, and two denormalized,
+  mechanically-maintained counts:
+  - `bookmark_count`, kept in sync by a new trigger on `bookmarks`
+    (`sync_resource_bookmark_count`, scoped to `target_type = 'resource'`
+    only -- every other target type untouched) -- a deliberate departure
+    from `interview_experience_votes`' "always compute fresh" approach,
+    because "Most Bookmarked" needed to be a real, paginatable DB sort,
+    not just a display number.
+  - `download_count`, incremented via a new atomic RPC
+    (`increment_resource_downloads`), same race-avoidance pattern Phase 6's
+    `bulk_increment_question_stats()` established.
+- Extended (not replaced) three existing CHECK constraints:
+  `bookmarks_target_type_check` (+ `'resource'`), `admin_audit_logs_action_check`
+  (+ 7 resource actions) and its `target_type_check` (+ `'resource'`),
+  `notifications_type_check` (+ `resource-pending-review`/`resource-approved`/
+  `resource-rejected` -- alongside `new-resource`, which migration `0001`
+  had already anticipated back in Sprint 3 but nothing had used until now).
+- RLS mirrors `interview_experiences`' exact shape: select
+  (`approved` OR own OR admin), insert (own row only), update/delete
+  (admin only) -- defense-in-depth, since every write already goes through
+  the service-role client.
+
+**New backend, `subjects.py` / `topics.py`** (2 routes total): minimal
+read-only lists completing a read-surface that already had tables + RLS
+but no endpoint, so the Resource submission form can offer real subject/
+topic ids instead of free text.
+
+**New backend, `resources.py`** (8 routes): list (search/category/company/
+subject/topic/difficulty/tags/status/sort_by, all server-side --
+deliberately not the "fetch everything, filter client-side"
+`useQuestionFilters` pattern, since this taxonomy is wide enough that
+wouldn't scale the way it does for a few hundred questions), get-one,
+create (multipart, file OR external link, reuses the exact `pdfs.py`
+upload-validation/storage-path convention), download (mints a short-lived
+signed URL for a file resource since the `pdfs` bucket is private, or
+hands back the external link as-is; either way atomically increments
+`download_count`), status update (approve/reject with required rejection
+reason), edit (bumps `version` only on a real change), delete (also
+removes the underlying storage object for file-based resources -- there
+was no existing precedent for this in the codebase, since `pdf_resources`
+has no delete endpoint at all, so this is fresh cleanup logic, not a copy),
+and **bulk-action** (approve/reject/delete many at once, reusing the exact
+same per-item logic as the single-item endpoints rather than a second
+implementation, one summarizing audit-log entry per batch instead of one
+per item).
+
+**Admin integration** (no separate admin module, per the brief): 
+`admin.py`'s dashboard summary gained `pendingResourceReviews` (same
+count-per-status-query style as every other stat there); the audit
+target-type/action lists gained `resource`/8 new actions; a new
+`AdminResourcesPage` at `/admin/resources` -- its own route, same as
+Question Bank moderation already gets its own `/admin/review` instead of
+living inside the dashboard -- with a moderation queue, per-item approve/
+reject/edit/delete, and a checkbox-driven **Bulk Actions** toolbar (select-all
++ per-row select + bulk approve/reject/delete), which is a genuinely new
+UI pattern in this codebase (neither `admin-review-page.tsx` nor
+`interview-experiences-page.tsx`'s admin actions had bulk selection to
+copy from).
+
+**Company Hub integration:** the existing `company-detail-page.tsx`
+Resources tab (previously PDF-only) now shows two labeled subsections --
+"Preparation PDFs" (unchanged) and "Resource Library" (new, reuses the
+exact `ResourceCard` component the Resource Library page itself renders,
+filtered to `companyId` + `status=approved`) -- rather than a second,
+parallel resources tab.
+
+**New frontend:** `resource.ts` (shared types), `use-subjects.ts`/
+`use-topics.ts`/`use-resources.ts` (hooks), `resource-card.tsx`/
+`resource-filters.tsx`/`resource-submission-dialog.tsx` (components),
+`resource-library-page.tsx` (the main `/resources` page) and
+`admin-resources-page.tsx`. Wired into `router.tsx` (`/resources`,
+`/admin/resources`), `nav-items.ts` ("Resource Library" under Prepare,
+"Pending Resources" under Admin), and `admin-dashboard-page.tsx` (new stat
+card linking to the queue). Existing modules untouched beyond the minimal
+integration edits above -- no redesign, no nav restructuring, no
+duplicated components.
+
+**Deliberately not built this pass:** Alumni, Community, Mentorship --
+explicitly out of scope per the brief, same "stop here" boundary every
+prior pass in this file has respected for adjacent unbuilt modules.
+
+**Verified (real, not asserted):**
+- `pnpm typecheck` (shared + client), `pnpm lint` (oxlint -- 0 errors,
+  same 1 pre-existing `main.tsx` fast-refresh warning carried forward
+  unchanged), `pnpm build` (production Vite build) -- all pass.
+- `ruff check` on the full `server/app` tree -- 0 issues.
+- **Installed a real, throwaway PostgreSQL 16 instance** (via `apt-get`)
+  and ran migrations `0001` through `0012` in sequence for real against a
+  minimal `auth`/`storage` shim -- all twelve apply cleanly, and `0012`
+  was additionally re-run a second time to confirm it's idempotent (every
+  `drop ... if exists` / `create or replace` / `create index if not
+  exists` genuinely no-ops on a second run rather than erroring).
+- **Functionally tested the new trigger and RPC against real rows**, not
+  just read for syntax: inserting a `bookmarks` row with
+  `target_type='resource'` incremented the target's `bookmark_count` by
+  exactly 1, deleting it decremented back to 0, and (critically) inserting
+  an unrelated `question`-type bookmark that happened to reuse the same
+  UUID as a resource's id did *not* touch `bookmark_count` -- confirming
+  the trigger's `target_type` guard actually works, not just its happy
+  path. `increment_resource_downloads()` was called twice against the
+  same row and returned `1` then `2`, matching the row's own
+  `download_count` read back afterward. The `resources_has_content` CHECK
+  was confirmed to genuinely reject an insert with neither a file nor a
+  link.
+- **Functionally exercised all 8 `resources.py` routes end-to-end**
+  through FastAPI's `TestClient` against a purpose-built in-memory fake
+  standing in for the Supabase client (not just import-and-boot): a
+  40-assertion scenario covering submit -> pending-review -> a second
+  student can't see it -> admin can (via `status` filter) -> approve ->
+  now visible to everyone -> edit bumps `version` (a no-op edit does not)
+  -> download increments `download_count` twice -> non-admin gets 403 on
+  status/delete -> bulk-approve two resources at once (plus one unknown
+  id correctly reported as failed, not a 500) -> bulk-reject without a
+  reason correctly 422s -> deleting a file-backed resource actually
+  removes the fake storage object -> the audit log contains every
+  expected action. All 40 checks passed; the two real bugs this caught
+  before they shipped (a `resource-bulk-rejectd` string-formatting typo
+  in the bulk audit-action name, and the download endpoint originally
+  being `GET` instead of `POST` despite mutating state) are both fixed in
+  the code above, not just noted here. The test harness itself was
+  removed after use -- this codebase still has no checked-in automated
+  suite (see the standing caveat below), and one ad hoc verification
+  script isn't a substitute for one.
+- Confirmed route registration by count: 68 total routes, up from 58
+  (8 `resources.py` + 1 `subjects.py` + 1 `topics.py`).
+
+**What could NOT be verified** (same standing caveat every pass in this
+file carries): no live Supabase project, so PostgREST's actual embed
+syntax (`subjects(id,name)`/`topics(id,name)`/`companies(id,name)` off
+`resources`), real RLS enforcement under a real JWT's `auth.uid()`, and
+the real Storage API's `create_signed_url()` response shape were
+confirmed by reading the installed `storage3` library's source and
+matching existing call sites, not by an actual call against a live
+project. Migration `0012` itself needs to be applied via the Supabase SQL
+editor/CLI, same as every migration before it, before any of this works
+in production.
+
+## Phase 6A -- Company Intelligence Hub detail (previous pass)
 
 **Per-section reuse breakdown** (the point of doing the audit first):
 

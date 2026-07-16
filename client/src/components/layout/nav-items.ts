@@ -15,6 +15,9 @@ import {
   ShieldCheck,
   Gauge,
   ScrollText,
+  Library,
+  GraduationCap,
+  Flag,
   type LucideIcon,
 } from "lucide-react";
 
@@ -41,6 +44,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Question Bank", href: "/questions", icon: BookOpenText },
       { label: "PDF Library", href: "/pdfs", icon: FileStack },
+      { label: "Resource Library", href: "/resources", icon: Library },
       { label: "Quiz", href: "/quiz", icon: ClipboardList },
       { label: "Companies", href: "/companies", icon: Building2 },
     ],
@@ -49,6 +53,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Community",
     items: [
       { label: "Interview Experiences", href: "/experiences", icon: MessagesSquare },
+      { label: "Alumni Network", href: "/alumni", icon: GraduationCap },
       { label: "Community", href: "/community", icon: Users },
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
     ],
@@ -67,6 +72,9 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Dashboard", href: "/admin", icon: Gauge, adminOnly: true },
       { label: "Review Queue", href: "/admin/review", icon: ShieldCheck, adminOnly: true },
+      { label: "Pending Resources", href: "/admin/resources", icon: Library, adminOnly: true },
+      { label: "Pending Alumni Verification", href: "/admin/alumni", icon: GraduationCap, adminOnly: true },
+      { label: "Community Moderation", href: "/admin/community", icon: Flag, adminOnly: true },
       { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText, adminOnly: true },
     ],
   },
