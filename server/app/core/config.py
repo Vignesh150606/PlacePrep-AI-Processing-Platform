@@ -88,6 +88,17 @@ class Settings(BaseSettings):
     def allowed_upload_mime_types(self) -> List[str]:
         return self.allowed_pdf_mime_types + self.allowed_image_mime_types
 
+    # Phase 13: question images/attachments need a PUBLIC bucket (embedded
+    # inline, viewed repeatedly across quiz attempts) -- unlike 'pdfs',
+    # which is private and only ever handed out as a short-lived signed
+    # URL for one-off downloads (see resources.py's download_resource).
+    # Audit found `interview-images` already exists (migration 0002) with
+    # exactly the right shape -- public, own-folder write/delete RLS -- but
+    # was never actually wired up to any endpoint. Reused here rather than
+    # provisioning a second public bucket for the same purpose.
+    QUESTION_ASSET_BUCKET: str = "interview-images"
+    MAX_QUESTION_ASSET_SIZE_BYTES: int = 8 * 1024 * 1024  # 8MB
+
     # --- AI provider (Step 2/3) ---
     AI_PROVIDER: Literal["gemini"] = "gemini"
     GEMINI_API_KEY: Optional[str] = None

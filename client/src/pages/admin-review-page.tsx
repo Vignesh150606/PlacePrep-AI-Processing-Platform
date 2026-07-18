@@ -105,20 +105,51 @@ function EditQuestionDialog({
   );
 }
 
+const SOURCE_FILTERS: Array<{ label: string; value: string | undefined }> = [
+  { label: "All", value: undefined },
+  { label: "Student submissions", value: "STUDENT_MANUAL" },
+  { label: "Bulk import", value: "BULK_IMPORT" },
+  { label: "Admin manual", value: "ADMIN_MANUAL" },
+  { label: "AI extracted", value: "AI" },
+];
+
+const SOURCE_LABEL: Record<string, string> = {
+  AI: "AI extracted",
+  ADMIN_MANUAL: "Admin manual",
+  STUDENT_MANUAL: "Student submission",
+  BULK_IMPORT: "Bulk import",
+};
+
 /**
  * Module 8 — Admin Review. Approve/Reject/Edit/Delete for pending-review
  * questions (the ones the confidence gate in classification.py routed away
  * from the public bank). "Merge" is intentionally not built this pass — see
  * PROJECT_STATE.md.
+ *
+ * Phase 13 extended this into the "Student Question Queue" too, rather than
+ * building a separate duplicate page for it -- a student-submitted question
+ * is a `pending-review` question like any other, just with
+ * `sourceType: "STUDENT_MANUAL"`. The source filter row below is the whole
+ * of that "separate" surface.
  */
 export function AdminReviewPage() {
-  const { data, isLoading, isError, refetch } = usePendingReviewQuestions();
+  const [sourceType, setSourceType] = React.useState<string | undefined>(undefined);
+  const { data, isLoading, isError, refetch } = usePendingReviewQuestions(sourceType);
   const { data: companyData } = useCompanies();
   const { setStatus, remove } = useReviewQuestion();
   const [editingQuestion, setEditingQuestion] = React.useState<Question | null>(null);
 
   const companyNameById = new Map((companyData?.items ?? []).map((c) => [c.id, c.name]));
   const questions = data?.items ?? [];
+
+  function handleReject(question: Question) {
+    const reason = window.prompt("Rejection reason (shown to the submitter if this is their own question):");
+    if (!reason) return;
+    setStatus.mutate(
+      { id: question.id, status: "rejected", rejectionReason: reason },
+      { onSuccess: () => toast.success("Rejected.") },
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -127,8 +158,21 @@ export function AdminReviewPage() {
         <p className="text-sm text-muted-foreground">
           {isLoading
             ? "Loading…"
-            : `${questions.length} question${questions.length === 1 ? "" : "s"} extracted below the confidence threshold, awaiting review.`}
+            : `${questions.length} question${questions.length === 1 ? "" : "s"} awaiting review.`}
         </p>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {SOURCE_FILTERS.map((f) => (
+          <Button
+            key={f.label}
+            size="sm"
+            variant={sourceType === f.value ? "primary" : "secondary"}
+            onClick={() => setSourceType(f.value)}
+          >
+            {f.label}
+          </Button>
+        ))}
       </div>
 
       {isLoading ? (
@@ -151,13 +195,14 @@ export function AdminReviewPage() {
             <Card key={question.id} className="p-5">
               <div className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="accent">{SOURCE_LABEL[question.sourceType] ?? question.sourceType}</Badge>
                   <DifficultyBadge difficulty={question.difficulty} />
                   {question.subject && <Badge variant="neutral">{question.subject}</Badge>}
                   {question.topic && <Badge variant="accent">{question.topic}</Badge>}
                   {question.companyId && (
                     <Badge variant="neutral">{companyNameById.get(question.companyId) ?? "Unknown company"}</Badge>
                   )}
-                  {question.confidenceScore !== undefined && (
+                  {question.confidenceScore !== undefined && question.sourceType === "AI" && (
                     <Badge variant="warning">{Math.round(question.confidenceScore * 100)}% confidence</Badge>
                   )}
                 </div>
@@ -201,12 +246,7 @@ export function AdminReviewPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() =>
-                      setStatus.mutate(
-                        { id: question.id, status: "rejected" },
-                        { onSuccess: () => toast.success("Rejected.") },
-                      )
-                    }
+                    onClick={() => handleReject(question)}
                     disabled={setStatus.isPending}
                   >
                     <XCircle className="size-3.5" />

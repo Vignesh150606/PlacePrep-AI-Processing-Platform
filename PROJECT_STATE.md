@@ -1,38 +1,193 @@
 # PlacePrep Project State
 
-Last updated: 2026-07-16 (Phase 12 -- Placement Community)
+Last updated: 2026-07-18 (Phase 13 -- Question Authoring System)
 
 ## This pass, in one paragraph
 
-Phase 12: built the Placement Community -- a professional discussion
-forum for placement preparation (doubts, OA/company discussions,
-preparation strategies), deliberately NOT social media (no feed algorithm,
-no DMs, no real-time chat). Audited first: the only prior "community"
-infrastructure anywhere in the codebase was a `'community-reply'`
-notification type (reserved, unused, migration 0001) and a nav
-item/route pointed at `ComingSoonPage` -- no tables, no endpoints, no
-components. Reused everything else instead of duplicating it -- the
-existing `profiles` table for identity (same anonymity-redaction shape
-`interview_experiences` established), the existing `companies` table
-(optional FK + denormalized free-text fallback, same shape
-`resources.author` established), the existing generic `bookmarks` table
-(`target_type = 'community-post'`), the existing `admin_audit_logs`/
-`notifications` tables (extended, not replaced), and the existing Admin
-Portal (new page, not a new admin system). Two new tables
-(`community_posts`, `community_comments`) plus vote/report child tables,
-one new endpoint module (`community.py`, 22 routes), and -- per the
-brief's explicit "reuse the Alumni module" instruction -- four new
-triggers that feed Community contributions/helpful-votes into the SAME
-`alumni_profiles.contribution_count`/`helpful_votes_received` counters
-Phase 11 introduced, rather than a second stats system. Deliberately NOT
-a submission queue like `resources`/`interview_experiences`: posts and
-replies are visible immediately (this is a forum), moderation is
-reactive (report -> admin reviews -> pin/lock/delete/suspend). Company
-Hub gained a new Community tab (quick filters: All / Most Useful /
-Interview / Preparation, over the one shared query); Admin Portal gained
-a Community Moderation page (reported posts/replies queue, per-user
-suspension) and a dashboard stat card. Messaging, real-time chat, and
-mentorship scheduling stay out of scope per the brief.
+Phase 13 (of a two-part brief -- Part 2 first; see "What's deferred to
+Phase 14" below): built the Question Authoring System -- three no-AI ways
+to grow the Question Bank alongside the existing AI extraction pipeline.
+Audited first: `questions.py` had no create endpoint at all -- every row
+in `questions` to date came from exactly one place,
+`services/pipeline.py`'s AI extraction run. Rather than write a second
+(or third, or fourth) insert path, `pipeline.py`'s own insert logic
+(questions + options + topics + companies) was lifted out into a new
+shared `services/question_authoring.py::create_question_record()` --
+`pipeline.py` now calls it too, so there is exactly one place that ever
+writes a question row-set, used by all four entry points (AI, Admin
+Manual Builder, Student Submission, Smart Bulk Parser). `services/
+duplicate.py` and `services/classification.py` needed zero changes --
+both were already generic over "some question text," not AI-pipeline
+specific. Method 1 (Admin Manual Builder): a full authoring form
+(type/options/difficulty/subject/topic/company/tags/explanation/
+solution/interview tip/reference/images/attachments), draft or publish;
+Draft Management is just `GET /questions?mine=true&status=draft`, not a
+new table. Method 2 (Student Submission): same form, always lands as
+`pending-review` -- students never publish directly -- reuses the exact
+Admin Review queue (`/admin/review`) rather than a separate moderation
+system; a source-type filter row there IS the "Student Question Queue."
+Method 3 (Smart Bulk Parser): a real, no-AI text parser (regex-based
+question/option/answer/solution boundary detection, verified standalone
+against a hand-built multi-question sample -- see this section's "How
+this was verified" below),
+a preview table (parsed / missing answer / missing option / duplicate /
+invalid, per the brief's own symbol list), per-row editing before
+import, and an Import History table (`question_import_batches`, new --
+aggregate stats only, deliberately doesn't store the raw pasted text).
+`questions` gained authoring metadata (`source_type`, `submission_method`,
+`solution_steps`, `interview_tip`, `reference_note`, `image_urls`,
+`attachment_urls`, `reviewed_by`/`reviewed_at`/`rejection_reason`, and a
+new `'draft'` status) but NO new question table -- AI-extracted and
+manually-authored questions are indistinguishable to the Question Bank,
+Quiz Engine, Company Hub, Analytics, Bookmarks, and Wrong Answer
+Notebook. Question images/attachments reuse the `interview-images`
+storage bucket (migration 0002) -- provisioned two phases ago, never
+actually wired to an endpoint until now, rather than provisioning a
+second public bucket for the same purpose. **What's deferred to Phase
+14:** the brief's Part 1, Mobile Experience & PWA. Audited first there
+too -- some responsive work already exists (`mobile-nav.tsx`, Sprint 1A),
+but there is currently NO PWA infrastructure at all (no manifest, no
+service worker, no install prompt). Both parts of the brief were each
+the size of a prior full phase on their own (Part 1 touches all ~23
+pages; Part 2 is a new subsystem plus six admin surfaces) -- shipping
+one bounded feature per pass, same as every phase before this one,
+rather than both at reduced quality in one.
+
+## Phase 13 -- Question Authoring System detail
+
+**What exists (migration 0015, `question_authoring.py`, extended
+`questions.py`, `use-question-authoring.ts`,
+`components/questions/question-authoring-form.tsx`,
+`admin-question-builder-page.tsx`, `submit-question-page.tsx`,
+`admin-bulk-import-page.tsx`, extended `admin-review-page.tsx`):**
+
+- **Shared write path** -- `question_authoring.create_question_record()`
+  validates (type/difficulty/option count/at-least-one-correct), computes
+  the content hash, runs `duplicate.check_duplicate()`, runs
+  `classification.classify()` for subject/topic/company get-or-create
+  (its confidence-driven `status` is ignored here -- every caller decides
+  `status` explicitly), then does the same four-table insert
+  `pipeline.py` always did. Returns `is_duplicate` (with a
+  `duplicate_reason` of `"exact-hash"` or `"fuzzy-similarity"`) instead of
+  raising, so a bulk import loop can count a duplicate and move to the
+  next row instead of aborting. An exact content-hash match ALWAYS blocks
+  (the DB's unique constraint would reject the insert anyway); a fuzzy
+  near-match only blocks when the caller passes
+  `block_fuzzy_duplicates=True` -- the AI pipeline does (preserving its
+  exact original always-skip-on-any-duplicate behavior), manual/bulk
+  callers default to leaving it as a non-blocking warning, since a human
+  is right there to decide.
+- **Method 1 -- Admin Manual Builder** (`POST /questions`,
+  `PATCH /{id}/publish`) -- `publish: false` (default) saves `status:
+  'draft'`, private to its creator; `publish: true` runs straight to
+  `'approved'` (no separate review step -- the admin publishing is the
+  reviewer). Draft Management is `GET /questions?mine=true&status=draft`.
+- **Method 2 -- Student Submission** (`POST /questions/submissions`) --
+  always `status: 'pending-review'`, `notifications.notify_admins()`
+  fires the same way `resources.py`'s upload workflow already does. "My
+  Submissions" is `GET /questions?mine=true`. The Review Queue
+  (`admin-review-page.tsx`) gained a source-type filter row (All /
+  Student submissions / Bulk import / Admin manual / AI extracted) --
+  that filter IS the "Student Question Queue," not a second page. Reject
+  now requires a reason (`rejectionReason`, prompted client-side, stored
+  on the row) and notifies the submitter (`question-approved` /
+  `question-rejected`) when the question is their own manually-authored
+  or submitted one -- an AI-extracted question has no single "owner"
+  checking a status page, so this notify path never existed before now.
+- **Method 3 -- Smart Bulk Parser** (`POST /questions/bulk-parse`,
+  `POST /questions/bulk-import`, `GET /questions/import-batches`) -- pure
+  regex-based parsing (`question_authoring.parse_bulk_text`), NO AI/LLM
+  call: splits on either an inline `Q<n>.` line or a `---`/`===`
+  separator, detects `A./B./C./D.` options, an `Answer:` line (single or
+  comma/space-separated for multi-select), a `Solution:`/`Explanation:`
+  section, and optional `Difficulty:`/`Tags:`/`Company:`/`Subject:`/
+  `Topic:` lines. `bulk-parse` writes nothing -- pure preview, including a
+  read-only duplicate lookup against the real bank. `bulk-import` only
+  imports rows the admin chose to keep (per the brief: a single bad row
+  never aborts the batch -- it's a per-item result, not a fatal error) and
+  records one `question_import_batches` row for Import History/Import
+  Statistics.
+- **Reused, not duplicated:** `services/duplicate.py`,
+  `services/classification.py`, the storage upload pattern
+  `resources.py` established (`{uploader}/{uuid}.ext` path, this time
+  against the `interview-images` bucket -- see below), the
+  `resources.py`-established "non-admins see approved OR their own
+  regardless of status" RLS/app-filter pattern (now on `questions` too,
+  behind an explicit `mine=true` flag rather than the default browse
+  query -- see "A deliberate deviation" below), and the exact
+  `resource-pending-review`/`resource-approved`/`resource-rejected`
+  notification trio shape (new nouns, same shape).
+- **A deliberate deviation from the `resources.py` pattern:** for
+  `resources`, "own regardless of status" is the DEFAULT for a
+  non-admin's browse query. For `questions`, it's only applied when the
+  caller explicitly passes `mine=true`; the default Question Bank browse
+  (which feeds the Quiz Engine directly) still strictly returns
+  `status = 'approved'`, unchanged from before this phase. A resource
+  showing up "pending" in a library list is a minor cosmetic thing; a
+  non-approved question showing up in a quiz attempt is not.
+- **Storage:** question images/attachments reuse the `interview-images`
+  bucket (migration 0002, public, `{uploader}/{uuid}.ext` RLS) --
+  provisioned in Phase 9's own migration but never actually wired to any
+  endpoint until this phase. `config.py`'s new `QUESTION_ASSET_BUCKET`
+  points at it, with a comment explaining the reuse, rather than
+  provisioning a second public bucket for the same purpose.
+- **Schema (migration 0015):** `questions` gained `source_type`
+  (`AI`/`ADMIN_MANUAL`/`STUDENT_MANUAL`/`BULK_IMPORT`),
+  `submission_method` (`PDF`/`IMAGE`/`TEXT`/`MANUAL`, nullable --
+  pre-existing AI rows are left null rather than backfilled),
+  `reviewed_by`/`reviewed_at`/`rejection_reason`, `image_urls`/
+  `attachment_urls` (`text[]`), `solution_steps`/`interview_tip`/
+  `reference_note`, and `'draft'` added to the status check constraint.
+  New table `question_import_batches` (aggregate stats only). Extended,
+  not replaced: `admin_audit_logs`' action check (+`question-published`,
+  +`question-bulk-imported`) and target_type check
+  (+`question-import-batch`, since a bulk-import audit entry's
+  `target_id` is a batch id, not a real `questions.id` -- reusing
+  `'question'` there would have been misleading); `notifications`' type
+  check (+`question-pending-review`, +`question-approved`,
+  +`question-rejected`).
+
+**How this was verified (real, not asserted):**
+
+- `pnpm typecheck` (shared, then client) -- clean on the first pass.
+- `pnpm lint` (oxlint, client) -- 0 errors (1 pre-existing warning in
+  `main.tsx`, unrelated to this phase).
+- `pnpm build` (client, production) -- clean; existing >500kB single-chunk
+  warning is pre-existing (no code-splitting has been introduced for any
+  page yet, Phase 13 included).
+- `ruff check` (server) -- 0 errors after fixing one ambiguous-variable-name
+  lint (`l` -> `lbl` in the answer-label parser) caught on the first run.
+- Live import: `from app.main import app` succeeds; enumerated all 107
+  routes app-wide and confirmed every new endpoint registers at the
+  expected path (`GET/POST /questions`, `POST /questions/assets`,
+  `POST /questions/submissions`, `POST /questions/bulk-parse`,
+  `POST /questions/bulk-import`, `GET /questions/import-batches`,
+  `PATCH /questions/{id}/publish`); `app.openapi()` generates cleanly
+  (81 paths) -- a real check that every new Pydantic response/request
+  model is well-formed, not just that the file imports.
+- `services/pipeline.py`'s refactored insert path imports and resolves
+  correctly (`from app.services import pipeline, question_authoring`) --
+  confirms the DRY-up didn't break the AI extraction path it replaced
+  code in.
+- The Smart Bulk Parser's `_split_blocks`/`_parse_block` logic was
+  extracted standalone (no DB dependency) and run against a hand-built
+  4-question sample covering every documented case: a clean MCQ, a
+  multi-select (`Answer: A, B, D`), a question with no options at all,
+  and a question whose answer letter doesn't match any option -- all
+  four classified correctly before this logic was pasted into the real
+  service module.
+- **What could NOT be verified this pass** (no live Supabase project in
+  this environment, same constraint every earlier phase has noted): the
+  migration was not run against a real Postgres instance (SQL was
+  proofread twice, including a cross-check of the full prior
+  `admin_audit_logs`/`notifications` check-constraint lists against
+  migration 0014 to make sure extending them didn't silently drop an
+  existing value); the `interview-images` bucket reuse (public URL
+  generation, upload RLS) was not exercised against a live bucket; no
+  browser/live-render check of the three new pages or the shared
+  authoring form (react-hook-form + zod validation, the options
+  field-array, image/attachment upload UI) -- `tsc` catches type errors,
+  not runtime/rendering behavior.
 
 ## Phase 12 -- Placement Community detail
 

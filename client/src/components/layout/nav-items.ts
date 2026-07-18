@@ -18,6 +18,8 @@ import {
   Library,
   GraduationCap,
   Flag,
+  PenSquare,
+  UploadCloud,
   type LucideIcon,
 } from "lucide-react";
 
@@ -43,6 +45,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Prepare",
     items: [
       { label: "Question Bank", href: "/questions", icon: BookOpenText },
+      { label: "Submit a Question", href: "/questions/submit", icon: PenSquare },
       { label: "PDF Library", href: "/pdfs", icon: FileStack },
       { label: "Resource Library", href: "/resources", icon: Library },
       { label: "Quiz", href: "/quiz", icon: ClipboardList },
@@ -72,6 +75,8 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Dashboard", href: "/admin", icon: Gauge, adminOnly: true },
       { label: "Review Queue", href: "/admin/review", icon: ShieldCheck, adminOnly: true },
+      { label: "Question Builder", href: "/admin/questions/new", icon: PenSquare, adminOnly: true },
+      { label: "Bulk Import Questions", href: "/admin/questions/bulk-import", icon: UploadCloud, adminOnly: true },
       { label: "Pending Resources", href: "/admin/resources", icon: Library, adminOnly: true },
       { label: "Pending Alumni Verification", href: "/admin/alumni", icon: GraduationCap, adminOnly: true },
       { label: "Community Moderation", href: "/admin/community", icon: Flag, adminOnly: true },

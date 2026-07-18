@@ -31,10 +31,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import get_settings
 from app.core.supabase_client import get_supabase_admin
-from app.services import answer_key, chunking, classification, image_text, notifications, ocr
+from app.services import answer_key, chunking, image_text, notifications, ocr, question_authoring
 from app.services.ai.base import AIProviderError, ExtractedQuestion
 from app.services.ai.service import get_ai_service
-from app.services.duplicate import check_duplicate, compute_content_hash
+from app.services.duplicate import compute_content_hash
 from app.services.pdf_text import PdfTextExtractionError, extract_text_with_quality
 
 logger = logging.getLogger(__name__)
@@ -289,68 +289,45 @@ async def run_pipeline(job_id: str) -> None:
             if not _is_valid(item):
                 continue
 
-            content_hash = compute_content_hash(item.question_text)
-            dup = check_duplicate(
-                item.question_text, content_hash, question_type=item.type, difficulty=item.difficulty
+            # Classification's confidence-based status decision still
+            # happens here (it needs `item.confidence`, which only the AI
+            # path has) -- `create_question_record` itself no longer makes
+            # that call, since a manually-authored question has no
+            # confidence score to threshold against. See
+            # `question_authoring.py`'s module docstring.
+            classified_status = (
+                "approved" if item.confidence >= get_settings().AI_CONFIDENCE_THRESHOLD else "pending-review"
             )
-            if dup.is_duplicate:
-                duplicate_count += 1
-                continue
+            if classified_status == "pending-review":
+                low_confidence_count += 1
 
-            classified = classification.classify(
+            result = question_authoring.create_question_record(
+                type_=item.type,
+                question_text=item.question_text,
+                options=[
+                    question_authoring.OptionInput(label=opt.label, text=opt.text, is_correct=opt.is_correct)
+                    for opt in item.options
+                ],
+                correct_explanation=item.correct_explanation,
+                difficulty=item.difficulty,
                 subject_name=item.subject,
                 topic_name=item.topic,
                 company_name=item.company,
-                confidence=item.confidence,
+                tags=item.tags,
+                source_pdf_id=pdf_id,
+                page_number=item.page_number,
+                confidence_score=item.confidence,
+                ai_provider="gemini",
+                created_by=uploader_id,
+                source_type="AI",
+                submission_method="IMAGE" if pdf_row.get("file_kind") == "image" else "PDF",
+                status=classified_status,
+                check_duplicates=True,
+                block_fuzzy_duplicates=True,  # unchanged from this pipeline's original behavior
             )
-            if classified.status == "pending-review":
-                low_confidence_count += 1
-
-            question_row = (
-                admin.table("questions")
-                .insert(
-                    {
-                        "type": item.type,
-                        "question_text": item.question_text,
-                        "content_hash": content_hash,
-                        "correct_explanation": item.correct_explanation,
-                        "difficulty": item.difficulty,
-                        "source_pdf_id": pdf_id,
-                        "page_number": item.page_number,
-                        "status": classified.status,
-                        "tags": item.tags,
-                        "created_by": uploader_id,
-                        "confidence_score": item.confidence,
-                        "ai_provider": "gemini",
-                    }
-                )
-                .execute()
-            )
-            question_id = question_row.data[0]["id"]
-
-            if item.options:
-                admin.table("question_options").insert(
-                    [
-                        {
-                            "question_id": question_id,
-                            "label": opt.label,
-                            "option_text": opt.text,
-                            "is_correct": opt.is_correct,
-                            "order_index": idx,
-                        }
-                        for idx, opt in enumerate(item.options)
-                    ]
-                ).execute()
-
-            if classified.topic_id:
-                admin.table("question_topics").insert(
-                    {"question_id": question_id, "topic_id": classified.topic_id}
-                ).execute()
-
-            if classified.company_id:
-                admin.table("question_companies").insert(
-                    {"question_id": question_id, "company_id": classified.company_id}
-                ).execute()
+            if result.is_duplicate:
+                duplicate_count += 1
+                continue
 
             inserted_count += 1
 

@@ -24,6 +24,9 @@ import { AdminAlumniPage } from "@/pages/admin-alumni-page";
 import { CommunityPage } from "@/pages/community-page";
 import { CommunityPostDetailPage } from "@/pages/community-post-detail-page";
 import { AdminCommunityPage } from "@/pages/admin-community-page";
+import { SubmitQuestionPage } from "@/pages/submit-question-page";
+import { AdminQuestionBuilderPage } from "@/pages/admin-question-builder-page";
+import { AdminBulkImportPage } from "@/pages/admin-bulk-import-page";
 import { WrongAnswersPage } from "@/pages/wrong-answers-page";
 import { BookmarksPage } from "@/pages/bookmarks-page";
 import { AnalyticsPage } from "@/pages/analytics-page";
@@ -71,6 +74,36 @@ const questionsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/questions",
   component: QuestionBankPage,
+});
+
+// NEW (Phase 13) -- Method 2, Question Authoring System: any signed-in
+// user can submit a question for admin review. Not gated at the route
+// level, same "backend already scopes visibility" pattern the rest of
+// this app uses -- submissions are private to their author + admins,
+// enforced in questions.py's own `mine=true` filter.
+const submitQuestionRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/questions/submit",
+  component: SubmitQuestionPage,
+});
+
+// NEW (Phase 13) -- Method 1, Question Authoring System. Same
+// not-gated-at-the-route-level pattern as every other admin-only page in
+// this router (backend is require_admin-gated; nav entry hidden from
+// non-admins).
+const adminQuestionBuilderRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/admin/questions/new",
+  component: AdminQuestionBuilderPage,
+});
+
+// NEW (Phase 13) -- Method 3, Question Authoring System (Smart Bulk
+// Parser). Same not-gated-at-the-route-level pattern as
+// adminQuestionBuilderRoute above.
+const adminBulkImportRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/admin/questions/bulk-import",
+  component: AdminBulkImportPage,
 });
 
 // MODIFIED (Sprint 1A): now validates an optional `mode` search param so
@@ -259,6 +292,7 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     indexRoute,
     questionsRoute,
+    submitQuestionRoute,
     quizRoute,
     companiesRoute,
     companyDetailRoute,
@@ -278,6 +312,8 @@ const routeTree = rootRoute.addChildren([
     adminResourcesRoute,
     adminAlumniRoute,
     adminCommunityRoute,
+    adminQuestionBuilderRoute,
+    adminBulkImportRoute,
     notificationsRoute,
     settingsRoute,
     notFoundRoute,

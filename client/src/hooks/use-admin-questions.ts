@@ -7,10 +7,13 @@ interface QuestionListResponse {
   total: number;
 }
 
-export function usePendingReviewQuestions() {
+export function usePendingReviewQuestions(sourceType?: string) {
   return useQuery({
-    queryKey: ["questions", "pending-review"],
-    queryFn: () => apiGet<QuestionListResponse>("/questions?status=pending-review"),
+    queryKey: ["questions", "pending-review", sourceType ?? "all"],
+    queryFn: () =>
+      apiGet<QuestionListResponse>(
+        `/questions?status=pending-review${sourceType ? `&sourceType=${sourceType}` : ""}`,
+      ),
     staleTime: 10_000,
   });
 }
@@ -22,14 +25,21 @@ export function useReviewQuestion() {
   };
 
   const setStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: "approved" | "rejected" }) =>
-      apiPatch<Question>(`/questions/${id}/status`, { status }),
+    mutationFn: ({ id, status, rejectionReason }: { id: string; status: "approved" | "rejected"; rejectionReason?: string }) =>
+      apiPatch<Question>(`/questions/${id}/status`, { status, rejectionReason }),
     onSuccess: invalidate,
   });
 
   const update = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Pick<Question, "text" | "correctExplanation" | "difficulty" | "tags">> }) =>
-      apiPatch<Question>(`/questions/${id}`, patch),
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: Partial<
+        Pick<Question, "text" | "correctExplanation" | "solutionSteps" | "interviewTip" | "referenceNote" | "difficulty" | "tags">
+      >;
+    }) => apiPatch<Question>(`/questions/${id}`, patch),
     onSuccess: invalidate,
   });
 

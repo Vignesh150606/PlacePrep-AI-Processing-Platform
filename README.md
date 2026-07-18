@@ -72,6 +72,16 @@ Supabase project's SQL editor: `0001` through `0014`. Each is idempotent
   contribution stats, mentorship indicator carry over from Community
   activity too) -- no real-time chat, DMs, or mentorship scheduling (out
   of scope by design; see `PROJECT_STATE.md`'s Phase 12 section)
+- Question Authoring System (Phase 13) -- three no-AI ways to grow the
+  Question Bank: an Admin Manual Builder (draft/publish), Student
+  Submission (always routes through Admin Review -- students never
+  publish directly), and a Smart Bulk Parser (paste hundreds of
+  "Q1./A.B.C.D./Answer:/Solution:"-formatted questions, get a preview
+  table with per-row status -- parsed/missing answer/missing option/
+  duplicate/invalid -- edit any row, then import); manually-authored and
+  AI-extracted questions are indistinguishable everywhere downstream
+  (Question Bank, Quiz Engine, Company Hub, Analytics, Bookmarks, Wrong
+  Answer Notebook)
 - Global search (⌘K command palette) and Daily Challenge backend (with
   streak tracking)
 - Notifications (dropdown + standalone page), Dashboard, Company pages,
@@ -80,6 +90,11 @@ Supabase project's SQL editor: `0001` through `0014`. Each is idempotent
 
 ## Not yet built
 
+- Mobile Experience & PWA (Phase 14, next) -- responsive passes on
+  individual pages exist (e.g. `mobile-nav.tsx`, Sprint 1A), but there is
+  currently NO PWA infrastructure at all: no `manifest.json`, no service
+  worker, no install prompt, no offline page. "Improve the existing PWA"
+  isn't accurate yet -- this is a from-scratch build, not a polish pass.
 - Real-time chat, direct messaging, and mentorship scheduling/booking --
   deliberately out of scope for both the Alumni Intelligence Network and
   the Placement Community; see `PROJECT_STATE.md`'s Phase 11/12 sections

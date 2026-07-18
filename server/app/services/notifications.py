@@ -8,7 +8,8 @@ from app.core.supabase_client import get_supabase_admin
 
 NotificationType = str  # "extraction-started" | "extraction-complete" | "extraction-failed" | "questions-added"
 # Phase 10 added "resource-pending-review" | "resource-approved" | "resource-rejected"
-# -- see migration 0012's notifications_type_check for the authoritative list.
+# Phase 13 added "question-pending-review" | "question-approved" | "question-rejected"
+# -- see migration 0015's notifications_type_check for the authoritative list.
 
 
 def notify(*, user_id: str, type_: NotificationType, title: str, message: str, link_url: Optional[str] = None) -> None:
