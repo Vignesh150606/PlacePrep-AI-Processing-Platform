@@ -155,6 +155,18 @@ def create_question_record(
         confidence=1.0,  # status is decided by the caller, not by classify()'s threshold
     )
 
+    # `questions.confidence_score` is `numeric(4,3) NOT NULL DEFAULT 1.0`.
+    # Passing `confidence_score=None` through as a literal insert value sends
+    # an explicit SQL NULL, which overrides the column's own DEFAULT and
+    # violates the NOT NULL constraint -- defaults only apply when a column
+    # is omitted, not when it's present as NULL. The AI pipeline always
+    # supplies a real extraction confidence here; Admin Manual Builder,
+    # Student Submission, and Smart Bulk Parser have no AI-derived score and
+    # previously left this as None. 1.0 is correct for those callers -- full
+    # confidence, since a human wrote or is directly responsible for the
+    # content instead of an AI extraction.
+    effective_confidence_score = confidence_score if confidence_score is not None else 1.0
+
     question_row = (
         admin.table("questions")
         .insert(
@@ -174,7 +186,7 @@ def create_question_record(
                 "image_urls": image_urls or [],
                 "attachment_urls": attachment_urls or [],
                 "created_by": created_by,
-                "confidence_score": confidence_score,
+                "confidence_score": effective_confidence_score,
                 "ai_provider": ai_provider,
                 "source_type": source_type,
                 "submission_method": submission_method,
