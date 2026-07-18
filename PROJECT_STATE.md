@@ -1,57 +1,224 @@
 # PlacePrep Project State
 
-Last updated: 2026-07-18 (Phase 13 -- Question Authoring System)
+Last updated: 2026-07-18 (Phase 14, Part 1 -- Mobile Experience & PWA)
 
 ## This pass, in one paragraph
 
-Phase 13 (of a two-part brief -- Part 2 first; see "What's deferred to
-Phase 14" below): built the Question Authoring System -- three no-AI ways
-to grow the Question Bank alongside the existing AI extraction pipeline.
-Audited first: `questions.py` had no create endpoint at all -- every row
-in `questions` to date came from exactly one place,
-`services/pipeline.py`'s AI extraction run. Rather than write a second
-(or third, or fourth) insert path, `pipeline.py`'s own insert logic
-(questions + options + topics + companies) was lifted out into a new
-shared `services/question_authoring.py::create_question_record()` --
-`pipeline.py` now calls it too, so there is exactly one place that ever
-writes a question row-set, used by all four entry points (AI, Admin
-Manual Builder, Student Submission, Smart Bulk Parser). `services/
-duplicate.py` and `services/classification.py` needed zero changes --
-both were already generic over "some question text," not AI-pipeline
-specific. Method 1 (Admin Manual Builder): a full authoring form
-(type/options/difficulty/subject/topic/company/tags/explanation/
-solution/interview tip/reference/images/attachments), draft or publish;
-Draft Management is just `GET /questions?mine=true&status=draft`, not a
-new table. Method 2 (Student Submission): same form, always lands as
-`pending-review` -- students never publish directly -- reuses the exact
-Admin Review queue (`/admin/review`) rather than a separate moderation
-system; a source-type filter row there IS the "Student Question Queue."
-Method 3 (Smart Bulk Parser): a real, no-AI text parser (regex-based
-question/option/answer/solution boundary detection, verified standalone
-against a hand-built multi-question sample -- see this section's "How
-this was verified" below),
-a preview table (parsed / missing answer / missing option / duplicate /
-invalid, per the brief's own symbol list), per-row editing before
-import, and an Import History table (`question_import_batches`, new --
-aggregate stats only, deliberately doesn't store the raw pasted text).
-`questions` gained authoring metadata (`source_type`, `submission_method`,
-`solution_steps`, `interview_tip`, `reference_note`, `image_urls`,
-`attachment_urls`, `reviewed_by`/`reviewed_at`/`rejection_reason`, and a
-new `'draft'` status) but NO new question table -- AI-extracted and
-manually-authored questions are indistinguishable to the Question Bank,
-Quiz Engine, Company Hub, Analytics, Bookmarks, and Wrong Answer
-Notebook. Question images/attachments reuse the `interview-images`
-storage bucket (migration 0002) -- provisioned two phases ago, never
-actually wired to an endpoint until now, rather than provisioning a
-second public bucket for the same purpose. **What's deferred to Phase
-14:** the brief's Part 1, Mobile Experience & PWA. Audited first there
-too -- some responsive work already exists (`mobile-nav.tsx`, Sprint 1A),
-but there is currently NO PWA infrastructure at all (no manifest, no
-service worker, no install prompt). Both parts of the brief were each
-the size of a prior full phase on their own (Part 1 touches all ~23
-pages; Part 2 is a new subsystem plus six admin surfaces) -- shipping
-one bounded feature per pass, same as every phase before this one,
-rather than both at reduced quality in one.
+Phase 14, Part 1 of the same two-part brief that shipped Phase 13 (Part 2,
+Question Authoring, first) -- Mobile Experience & PWA. Audited first:
+confirmed via the actual file tree that there was no PWA infrastructure at
+all (no manifest, no service worker, no install prompt, no offline page)
+and that all 25 page components loaded eagerly in one bundle via static
+imports in `router.tsx`. Built the PWA using vite-plugin-pwa's
+`injectManifest` strategy rather than its zero-config `generateSW`,
+because this pass needed two things the declarative config can't express:
+a real `workbox-background-sync` registration, and a genuine two-tier
+offline fallback (cached app shell first, a dedicated static
+`offline.html` only if even that isn't available yet, via
+`workbox-recipes`' `offlineFallback`). Runtime caching is NetworkFirst for
+the app's own `/api/v1/*` GET requests, CacheFirst for images, and
+explicitly NetworkOnly for Supabase (auth/storage) so a stale token is
+never served from cache; background sync is scoped to exactly one write
+endpoint, `POST /quizzes/attempts/{id}/submit`, queuing a quiz submission
+made offline and replaying it once the connection returns -- deliberately
+not extended to every write endpoint (see the detail section's "deliberately
+out of scope" note). Icons were generated from the existing brand mark
+(`favicon.svg`) via cairosvg + Pillow, composited onto a solid background
+at a maskable-safe ~62% scale, rather than commissioning new artwork. On
+the responsive side: a persistent mobile bottom tab bar (Dashboard /
+Questions / Quiz / Bookmarks + a "More" tab that opens the existing nav
+drawer instead of duplicating it); the shared `Dialog` primitive now
+renders as a bottom sheet below `lg` and a centered modal at `lg` and up
+-- one change that upgrades every dialog in the app at once, generalizing
+the pattern the quiz palette sheet already used one-off; 25 form-field
+grids across 7 files that were 2- or 3-column with no responsive prefix
+now stack to one column below `sm` (the calendar's 7-column week grid and
+the quiz palette's 5-column button grid were deliberately left alone --
+those column counts are inherent to what they render, not a layout bug);
+route-based code splitting for all 22 non-landing pages via `React.lazy`,
+turning the single eager bundle into a real per-route chunk graph; and a
+36px-to-40px touch-target bump on the shared icon-button size. Production
+hardening (Part 2 -- security review, DB audit, API audit, dead-code
+cleanup) is unchanged from Phase 13's own deferral note and remains
+deferred to its own pass -- see "Not yet built" in `README.md`.
+
+## Phase 14 -- Mobile Experience & PWA (Part 1) detail
+
+**What exists (new: `client/src/sw.ts`, PWA plugin config in
+`vite.config.ts`, `client/public/offline.html`, `client/public/icons/`,
+`client/public/apple-touch-icon.png`, `hooks/use-pwa-update.ts`,
+`components/pwa/install-prompt.tsx`, `components/pwa/offline-banner.tsx`,
+`components/layout/bottom-tab-bar.tsx`, `components/layout/
+route-loading-fallback.tsx`, `providers/mobile-nav-context.ts` +
+`providers/mobile-nav-provider.tsx` + `hooks/use-mobile-nav-context.ts`;
+modified: `components/ui/dialog.tsx`, `components/layout/app-layout.tsx`,
+`components/layout/mobile-nav.tsx`, `components/layout/top-nav.tsx`,
+`router.tsx`, `components/ui/button.tsx`, `index.html`, plus 25 form-grid
+call sites across 7 page/dialog files):**
+
+- **PWA strategy -- `injectManifest`, not `generateSW`:** the hand-written
+  `src/sw.ts` is bundled by vite-plugin-pwa with the real precache
+  manifest injected at `self.__WB_MANIFEST` (confirmed in the built
+  `dist/sw.js`: 106 entries, ~1.86 MB). Chosen over the plugin's
+  zero-config mode specifically so `BackgroundSyncPlugin` and
+  `workbox-recipes`' `offlineFallback` could be used directly instead of
+  fought around.
+- **Caching strategy, by content type:** app shell (JS/CSS/HTML/icons/
+  fonts) precached and served via `precacheAndRoute`; Supabase
+  (`*.supabase.co`) explicitly `NetworkOnly` -- never cached, since
+  serving a stale/expired auth token is worse than a clear offline state;
+  `/api/v1/*` GET requests `NetworkFirst` (`placeprep-api-cache`, 6s
+  network timeout, 200 entries / 24h) so a student who already opened a
+  page can still read it on a spotty connection; images `CacheFirst`
+  (`placeprep-image-cache`, 150 entries / 14 days).
+- **Background sync, scoped deliberately:** only
+  `POST /quizzes/attempts/{id}/submit` is queued via
+  `BackgroundSyncPlugin` (24h max retention) when offline. This is the
+  one write action where silently losing the request costs a student real
+  work -- a completed quiz attempt. Every other write endpoint (bookmarks,
+  community posts, admin actions, uploads, etc.) is deliberately NOT
+  covered; those still fail normally offline, surfaced by the app's
+  existing error-toast pattern. Extending this further is real remaining
+  work, not an oversight -- several of those writes are multi-step actions
+  where a queued-and-silently-replayed request could contradict state the
+  user already saw change.
+- **Offline fallback, two tiers:** `NavigationRoute` serves the precached
+  `index.html` for any client-side route navigation (the normal case,
+  works for every route once the app shell is cached); `offlineFallback`
+  serves a separate static `offline.html` (no JS dependency, inline CSS
+  only) only in the belt-and-suspenders case where even the app shell
+  isn't available yet.
+- **Icons:** generated programmatically from the existing `favicon.svg`
+  brand mark (cairosvg rasterization + Pillow compositing), centered at
+  ~62% scale on a solid `#0f0f14` background (the app's own dark-mode
+  `--background` token) so the icon stays within the safe zone OS
+  shape-masks (circle/squircle/rounded-square) won't clip. Produced at
+  192/512 (manifest, incl. a `purpose: maskable` entry) and 180
+  (`apple-touch-icon`). No separate iOS splash-screen image matrix was
+  generated -- see "deliberately out of scope" below.
+- **Install prompt, two variants:** Chromium/Android/desktop Chrome
+  capture the real `beforeinstallprompt` event and re-fire it from an
+  "Install" button tap; iOS Safari never fires that event at all and has
+  no programmatic install API, so it gets a one-line "tap Share, then Add
+  to Home Screen" instructional variant instead. Dismissal is remembered
+  in `localStorage` for 14 days, not forever, since a rushed first-session
+  dismissal shouldn't cost the option permanently.
+- **Update flow:** `virtual:pwa-register/react`'s `useRegisterSW` hook
+  (`use-pwa-update.ts`) bridges `needRefresh`/`offlineReady` into the
+  app's existing `sonner` toaster instead of a bare `confirm()` --
+  registration is driven from React (`injectRegister: null` in the plugin
+  config) so it isn't double-registered by the plugin's own auto-injected
+  script.
+- **Offline visibility:** a live `navigator.onLine` banner
+  (`offline-banner.tsx`), distinct from the one-time install/update
+  toasts -- appears and clears itself automatically as connectivity
+  changes.
+- **Bottom tab bar:** four primary destinations (Dashboard, Question
+  Bank, Quiz, Bookmarks) plus a "More" tab. The full nav tree (Admin,
+  Community, Alumni, Calendar, Resources, Settings, etc.) is deliberately
+  NOT duplicated as tabs -- "More" opens the exact same drawer `MobileNav`
+  already renders, via a lifted `MobileNavContext` (split into
+  `mobile-nav-context.ts` / `mobile-nav-provider.tsx` /
+  `use-mobile-nav-context.ts`, mirroring this codebase's own existing
+  `auth-context.ts` / `auth-provider.tsx` / `use-auth.ts` split), rather
+  than mounting a second drawer instance.
+- **Dialog -> responsive bottom sheet:** `DialogContent` renders as a
+  full-width bottom sheet (slide-up, rounded top corners, drag-handle
+  affordance, safe-area-aware bottom padding) below `lg`, and the
+  original centered modal at `lg` and up. Reuses the `slide-in-bottom`
+  keyframe the quiz palette sheet already defined, generalized into the
+  one component every dialog in the app renders through, instead of
+  staying a one-off pattern.
+- **Form-grid stacking, judgment not a mechanical sweep:** searched for
+  every un-prefixed `grid-cols-{2,3,...,9}` across `pages/` and
+  `components/`; 25 of them, across `admin-alumni-page.tsx`,
+  `placement-calendar-page.tsx`, `interview-experiences-page.tsx`,
+  `community-post-composer-dialog.tsx`, `alumni-profile-dialog.tsx`,
+  `resource-submission-dialog.tsx`, and `question-authoring-form.tsx`,
+  were genuine form-field pairs/triples (including side-by-side
+  `textarea`s in the authoring form) that would cramp badly at phone
+  width; those became `grid-cols-1 sm:grid-cols-2` /
+  `grid-cols-1 sm:grid-cols-3`. Three more matched the same grep
+  (`placement-calendar-page.tsx`'s two 7-column week grids,
+  `quiz-runner.tsx`'s 5-column palette button grid) but were deliberately
+  left untouched -- those column counts are what the content IS (a week
+  has 7 days; the shared palette component already fits comfortably at
+  phone width), not an oversight. Dashboard/analytics/alumni stat-tile
+  grids that start at `grid-cols-2` on the smallest phones were also left
+  alone on purpose -- 2-up compact stat tiles is a deliberate, common
+  mobile pattern, not the same failure mode as a 2-column form.
+- **Route-based code splitting:** every page other than `LoginPage` and
+  `DashboardPage` (the two first-paint routes) converted to
+  `React.lazy(() => import(...))` in `router.tsx`, with one
+  `<React.Suspense>` boundary around `AppLayout`'s `<Outlet>`
+  (`route-loading-fallback.tsx`) rather than one per route. Confirmed in
+  the build output: 22 separate page chunks plus `vendor-react`/
+  `vendor-charts`/`vendor-motion` manual chunks, replacing the prior
+  single eager bundle.
+- **Touch targets:** the shared `Button` component's `icon` size variant
+  went from 36px to 40px (one CVA change, applies everywhere `size="icon"`
+  is used -- 21 call sites); the mobile-only search trigger in `TopNav`
+  (a hand-rolled button, not the shared component) was bumped to match.
+- **`viewport-fit=cover` + safe-area insets:** added to `index.html` so
+  `env(safe-area-inset-*)` works, and applied to the bottom tab bar,
+  install prompt, offline banner, and the mobile dialog sheet's bottom
+  padding, so none of them sit under a notch or home-indicator area.
+
+**How this was verified (real, not asserted):**
+
+- `pnpm typecheck` (shared, then client) -- clean, after fixing two real
+  errors caught along the way: a `manualChunks` overload mismatch in
+  `vite.config.ts` (switched from the object-record form to the function
+  form) and `self.__WB_MANIFEST` needing an explicit ambient type
+  (`declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: ... }`
+  in `sw.ts`).
+- `pnpm lint` (oxlint, client) -- 0 errors. Two new warnings this pass
+  introduced were fixed before calling it done, not left for later: an
+  `exhaustive-deps` warning once `setOpen` moved from local state to
+  context (added it to the dependency array -- a `useState` setter is a
+  stable reference, so this is safe), and a `react-refresh/
+  only-export-components` warning from mixing a hook export with a
+  component export in one file (split into context/provider/hook files,
+  matching this codebase's own existing `auth-context.ts` split rather
+  than leaving a new inconsistency). The one pre-existing warning in
+  `main.tsx` (predates this phase, confirmed by checking it against the
+  unmodified file via `git stash`) is unchanged.
+- `pnpm build` (client, production) -- clean, and checked past the exit
+  code: `dist/` contains `sw.js`, `manifest.webmanifest`, `offline.html`,
+  `icons/`, `apple-touch-icon.png`; `manifest.webmanifest`'s fields
+  (name, icons array, `theme_color`, `background_color`) were read back
+  from the actual built file; `dist/sw.js` was grepped for
+  `placeprep-api-cache`, `placeprep-image-cache`, `quiz-submit-queue`,
+  and `supabase` to confirm the runtime-caching and background-sync
+  config compiled through, not just that the build didn't throw. 106
+  precache entries (~1.86 MB). 22 separate lazy-route chunk files
+  confirmed in the build output.
+- `ruff check` (server) -- 0 errors, unchanged from Phase 13 (this pass
+  touched zero server files).
+- Live import: `from app.main import app` succeeds with a dummy `.env`
+  (no live Supabase project in this environment) -- 107 routes, identical
+  to Phase 13's count, confirming no accidental server-side regression
+  from a frontend-only pass.
+- **What could NOT be verified this pass** (no real browser in this
+  environment, same constraint every earlier phase has noted for
+  live-render behavior): the service worker actually installing/
+  activating in a browser; the install prompt firing on a genuine
+  Chromium `beforeinstallprompt` event, or how its iOS variant actually
+  renders on a real device; the offline fallback triggering correctly
+  against a real severed network; background sync actually queuing and
+  replaying a request; and how the bottom sheet, bottom tab bar, and
+  newly-stacked form grids actually look and feel at real phone/tablet
+  viewport sizes, versus the Tailwind classes being syntactically the
+  ones intended. `tsc` and a successful build catch type and bundling
+  errors, not rendered layout.
+- **Deliberately out of scope this pass, not overlooked:** a
+  hand-generated iOS splash-screen image matrix (the many exact
+  per-device-resolution PNGs Apple's older mechanism wants) -- relying
+  instead on `apple-touch-icon` + `apple-mobile-web-app-capable` meta
+  tags, consistent with what most production PWAs ship today; background
+  sync on any write endpoint other than quiz submission; and Part 2 of
+  the Phase 14 brief (security/DB/API hardening, dead-code cleanup),
+  unchanged from Phase 13's deferral.
 
 ## Phase 13 -- Question Authoring System detail
 

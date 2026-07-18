@@ -203,7 +203,7 @@ function EventFormDialog({
             <Input id="title" placeholder="e.g. Amazon — SDE-1 Campus Drive" {...register("title")} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="type">Type</Label>
               <Controller
@@ -244,7 +244,7 @@ function EventFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="role">Role</Label>
               <Input id="role" placeholder="e.g. SDE-1" {...register("role")} />
@@ -286,7 +286,7 @@ function EventFormDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="registrationDeadline">Registration deadline</Label>
               <Input id="registrationDeadline" type="datetime-local" {...register("registrationDeadline")} />
@@ -297,7 +297,7 @@ function EventFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
             <div className="flex flex-col gap-2">
               <Label htmlFor="venue">{isOnline ? "Meeting link / platform" : "Venue"}</Label>
               <Input

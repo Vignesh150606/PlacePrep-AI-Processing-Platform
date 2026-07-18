@@ -5,36 +5,101 @@ import {
   redirect,
   Navigate,
 } from "@tanstack/react-router";
+import * as React from "react";
 import { z } from "zod";
 import type { AuthContextValue } from "@/providers/auth-context";
 import { AppLayout } from "@/components/layout/app-layout";
 import { LoginPage } from "@/pages/login-page";
 import { DashboardPage } from "@/pages/dashboard-page";
-import { QuestionBankPage } from "@/pages/question-bank-page";
-import { QuizPage } from "@/pages/quiz-page";
-import { CompaniesPage } from "@/pages/companies-page";
-import { CompanyDetailPage } from "@/pages/company-detail-page";
-import { PdfLibraryPage } from "@/pages/pdf-library-page";
-import { PlacementCalendarPage } from "@/pages/placement-calendar-page";
-import { InterviewExperiencesPage } from "@/pages/interview-experiences-page";
-import { ResourceLibraryPage } from "@/pages/resource-library-page";
-import { AdminResourcesPage } from "@/pages/admin-resources-page";
-import { AlumniDirectoryPage } from "@/pages/alumni-directory-page";
-import { AdminAlumniPage } from "@/pages/admin-alumni-page";
-import { CommunityPage } from "@/pages/community-page";
-import { CommunityPostDetailPage } from "@/pages/community-post-detail-page";
-import { AdminCommunityPage } from "@/pages/admin-community-page";
-import { SubmitQuestionPage } from "@/pages/submit-question-page";
-import { AdminQuestionBuilderPage } from "@/pages/admin-question-builder-page";
-import { AdminBulkImportPage } from "@/pages/admin-bulk-import-page";
-import { WrongAnswersPage } from "@/pages/wrong-answers-page";
-import { BookmarksPage } from "@/pages/bookmarks-page";
-import { AnalyticsPage } from "@/pages/analytics-page";
-import { AdminDashboardPage } from "@/pages/admin-dashboard-page";
-import { AdminAuditLogPage } from "@/pages/admin-audit-log-page";
-import { AdminReviewPage } from "@/pages/admin-review-page";
-import { NotificationsPage } from "@/pages/notifications-page";
-import { ComingSoonPage } from "@/pages/coming-soon";
+
+// NEW (Phase 14, Part 1 -- Performance): route-based code splitting. Every
+// route below other than Login and Dashboard (the two first-paint routes
+// -- pre-auth entry and the landing page for almost every session) is now
+// a separate chunk, loaded on navigation instead of upfront. Confirmed via
+// repo audit that all 25 pages previously loaded eagerly in one bundle.
+// `AppLayout` wraps `<Outlet />` in the one `<Suspense>` boundary these
+// need (see app-layout.tsx) rather than repeating one per route.
+const QuestionBankPage = React.lazy(() =>
+  import("@/pages/question-bank-page").then((m) => ({ default: m.QuestionBankPage })),
+);
+const QuizPage = React.lazy(() =>
+  import("@/pages/quiz-page").then((m) => ({ default: m.QuizPage })),
+);
+const CompaniesPage = React.lazy(() =>
+  import("@/pages/companies-page").then((m) => ({ default: m.CompaniesPage })),
+);
+const CompanyDetailPage = React.lazy(() =>
+  import("@/pages/company-detail-page").then((m) => ({ default: m.CompanyDetailPage })),
+);
+const PdfLibraryPage = React.lazy(() =>
+  import("@/pages/pdf-library-page").then((m) => ({ default: m.PdfLibraryPage })),
+);
+const PlacementCalendarPage = React.lazy(() =>
+  import("@/pages/placement-calendar-page").then((m) => ({ default: m.PlacementCalendarPage })),
+);
+const InterviewExperiencesPage = React.lazy(() =>
+  import("@/pages/interview-experiences-page").then((m) => ({
+    default: m.InterviewExperiencesPage,
+  })),
+);
+const ResourceLibraryPage = React.lazy(() =>
+  import("@/pages/resource-library-page").then((m) => ({ default: m.ResourceLibraryPage })),
+);
+const AdminResourcesPage = React.lazy(() =>
+  import("@/pages/admin-resources-page").then((m) => ({ default: m.AdminResourcesPage })),
+);
+const AlumniDirectoryPage = React.lazy(() =>
+  import("@/pages/alumni-directory-page").then((m) => ({ default: m.AlumniDirectoryPage })),
+);
+const AdminAlumniPage = React.lazy(() =>
+  import("@/pages/admin-alumni-page").then((m) => ({ default: m.AdminAlumniPage })),
+);
+const CommunityPage = React.lazy(() =>
+  import("@/pages/community-page").then((m) => ({ default: m.CommunityPage })),
+);
+const CommunityPostDetailPage = React.lazy(() =>
+  import("@/pages/community-post-detail-page").then((m) => ({
+    default: m.CommunityPostDetailPage,
+  })),
+);
+const AdminCommunityPage = React.lazy(() =>
+  import("@/pages/admin-community-page").then((m) => ({ default: m.AdminCommunityPage })),
+);
+const SubmitQuestionPage = React.lazy(() =>
+  import("@/pages/submit-question-page").then((m) => ({ default: m.SubmitQuestionPage })),
+);
+const AdminQuestionBuilderPage = React.lazy(() =>
+  import("@/pages/admin-question-builder-page").then((m) => ({
+    default: m.AdminQuestionBuilderPage,
+  })),
+);
+const AdminBulkImportPage = React.lazy(() =>
+  import("@/pages/admin-bulk-import-page").then((m) => ({ default: m.AdminBulkImportPage })),
+);
+const WrongAnswersPage = React.lazy(() =>
+  import("@/pages/wrong-answers-page").then((m) => ({ default: m.WrongAnswersPage })),
+);
+const BookmarksPage = React.lazy(() =>
+  import("@/pages/bookmarks-page").then((m) => ({ default: m.BookmarksPage })),
+);
+const AnalyticsPage = React.lazy(() =>
+  import("@/pages/analytics-page").then((m) => ({ default: m.AnalyticsPage })),
+);
+const AdminDashboardPage = React.lazy(() =>
+  import("@/pages/admin-dashboard-page").then((m) => ({ default: m.AdminDashboardPage })),
+);
+const AdminAuditLogPage = React.lazy(() =>
+  import("@/pages/admin-audit-log-page").then((m) => ({ default: m.AdminAuditLogPage })),
+);
+const AdminReviewPage = React.lazy(() =>
+  import("@/pages/admin-review-page").then((m) => ({ default: m.AdminReviewPage })),
+);
+const NotificationsPage = React.lazy(() =>
+  import("@/pages/notifications-page").then((m) => ({ default: m.NotificationsPage })),
+);
+const ComingSoonPage = React.lazy(() =>
+  import("@/pages/coming-soon").then((m) => ({ default: m.ComingSoonPage })),
+);
 
 export interface RouterContext {
   auth: AuthContextValue;

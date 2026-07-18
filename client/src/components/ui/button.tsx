@@ -21,7 +21,14 @@ const buttonVariants = cva(
         sm: "h-8 px-3 text-xs",
         md: "h-9 px-4",
         lg: "h-11 px-6 text-base",
-        icon: "h-9 w-9",
+        // MODIFIED (Phase 14, Part 1 -- Mobile Experience & PWA): 36px ->
+        // 40px. Icon-only buttons (nav triggers, dialog close, card
+        // actions) are exactly the controls a thumb taps most on a phone;
+        // 36px sits noticeably under the ~40-44px touch-target minimum
+        // most mobile guidelines recommend. This is a single CVA variant,
+        // so the fix applies everywhere `size="icon"` is used (21 call
+        // sites) without touching each one individually.
+        icon: "h-10 w-10",
       },
     },
     defaultVariants: {

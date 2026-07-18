@@ -6,9 +6,13 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useIsAdmin } from "@/hooks/use-profile";
 import { useDialogA11y } from "@/hooks/use-dialog-a11y";
+import { useMobileNavContext } from "@/hooks/use-mobile-nav-context";
 
 export function MobileNav() {
-  const [open, setOpen] = React.useState(false);
+  // MODIFIED (Phase 14, Part 1): open state lifted into MobileNavProvider
+  // so BottomTabBar's "More" tab can open this same drawer -- see that
+  // provider's header comment. Behavior for this component is unchanged.
+  const { open, setOpen } = useMobileNavContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = useIsAdmin();
   // FIX (accessibility, UI audit; retrofitted onto the shared contract in
@@ -23,7 +27,7 @@ export function MobileNav() {
 
   React.useEffect(() => {
     setOpen(false);
-  }, [pathname]);
+  }, [pathname, setOpen]);
 
   const visibleSections = NAV_SECTIONS.map((section) => ({
     ...section,

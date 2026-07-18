@@ -176,7 +176,7 @@ export function QuestionAuthoringForm({
 
   return (
     <form className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-2">
           <Label htmlFor="type">Question type</Label>
           <Controller
@@ -265,7 +265,7 @@ export function QuestionAuthoringForm({
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="flex flex-col gap-2">
           <Label htmlFor="subject">Subject</Label>
           <Input id="subject" placeholder="e.g. DSA" {...register("subject")} />
@@ -290,7 +290,7 @@ export function QuestionAuthoringForm({
         <Input id="tags" placeholder="arrays, two-pointers" {...register("tags")} />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-2">
           <Label htmlFor="correctExplanation">Explanation</Label>
           <textarea id="correctExplanation" className={textareaClass} placeholder="Why is this the correct answer?" {...register("correctExplanation")} />
@@ -301,7 +301,7 @@ export function QuestionAuthoringForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-2">
           <Label htmlFor="interviewTip">Interview tip</Label>
           <textarea id="interviewTip" className={textareaClass} placeholder="What an interviewer looks for here" {...register("interviewTip")} />
@@ -312,13 +312,13 @@ export function QuestionAuthoringForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-2">
           <Label>Images</Label>
           <div className="flex flex-wrap gap-2">
             {imageUrls.map((url) => (
               <div key={url} className="relative">
-                <img src={url} alt="" className="h-16 w-16 rounded-lg border border-border object-cover" />
+                <img src={url} alt="" loading="lazy" className="h-16 w-16 rounded-lg border border-border object-cover" />
                 <button
                   type="button"
                   className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-incorrect-500 text-white"

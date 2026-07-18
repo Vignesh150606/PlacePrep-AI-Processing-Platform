@@ -55,7 +55,7 @@ export function TopNav() {
           type="button"
           onClick={() => setPaletteOpen(true)}
           aria-label="Search questions, companies, PDFs"
-          className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+          className="flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
         >
           <Search className="size-4" />
         </button>

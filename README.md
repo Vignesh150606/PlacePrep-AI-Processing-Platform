@@ -36,7 +36,7 @@ direct image upload need).
 ## Database
 
 Apply every migration in `supabase/migrations/`, **in order**, via your
-Supabase project's SQL editor: `0001` through `0014`. Each is idempotent
+Supabase project's SQL editor: `0001` through `0015`. Each is idempotent
 (safe to re-run), but they are not independent of each other.
 
 ## What's here (see `PROJECT_STATE.md` for the full, current status)
@@ -82,6 +82,18 @@ Supabase project's SQL editor: `0001` through `0014`. Each is idempotent
   AI-extracted questions are indistinguishable everywhere downstream
   (Question Bank, Quiz Engine, Company Hub, Analytics, Bookmarks, Wrong
   Answer Notebook)
+- Mobile Experience & PWA (Phase 14, Part 1) -- an installable PWA from
+  scratch: manifest + icons, a hand-written Workbox service worker
+  (`injectManifest`) with NetworkFirst API caching, CacheFirst image
+  caching, a two-tier offline fallback (cached app shell, then a static
+  offline page), an install prompt (including an iOS Safari "Add to Home
+  Screen" variant), an update-available toast, and background sync for
+  quiz submissions made offline. Plus a responsive pass: a persistent
+  mobile bottom tab bar, every dialog in the app now renders as a bottom
+  sheet on mobile instead of a centered modal, route-based code splitting
+  for all 22 non-landing pages, and touch-target/form-layout fixes.
+  Production hardening (Phase 14, Part 2) is deliberately deferred -- see
+  "Not yet built" below.
 - Global search (⌘K command palette) and Daily Challenge backend (with
   streak tracking)
 - Notifications (dropdown + standalone page), Dashboard, Company pages,
@@ -90,11 +102,16 @@ Supabase project's SQL editor: `0001` through `0014`. Each is idempotent
 
 ## Not yet built
 
-- Mobile Experience & PWA (Phase 14, next) -- responsive passes on
-  individual pages exist (e.g. `mobile-nav.tsx`, Sprint 1A), but there is
-  currently NO PWA infrastructure at all: no `manifest.json`, no service
-  worker, no install prompt, no offline page. "Improve the existing PWA"
-  isn't accurate yet -- this is a from-scratch build, not a polish pass.
+- Production hardening (Phase 14, Part 2) -- security review (auth/RBAC/
+  input validation/rate limiting/CORS/security headers), a database audit
+  (indexes, constraints, cascade behavior, slow queries), an API audit
+  (status codes, validation, permissions, pagination across every
+  endpoint), and dead-code cleanup. This was the other half of the Phase
+  14 brief; deliberately deferred to its own pass rather than done at
+  reduced quality alongside Part 1 -- see `PROJECT_STATE.md`'s Phase 14
+  entry for the reasoning and for exactly what Part 1 did and didn't
+  cover (e.g. background sync covers one write endpoint, not all of
+  them; no hand-generated iOS splash-screen image matrix).
 - Real-time chat, direct messaging, and mentorship scheduling/booking --
   deliberately out of scope for both the Alumni Intelligence Network and
   the Placement Community; see `PROJECT_STATE.md`'s Phase 11/12 sections

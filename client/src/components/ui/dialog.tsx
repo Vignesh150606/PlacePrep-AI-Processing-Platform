@@ -15,16 +15,29 @@ export function DialogContent({
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-fade-in" />
+      {/* MODIFIED (Phase 14, Part 1 -- Mobile Experience & PWA): every
+          dialog in the app renders through this one component, so making
+          it a bottom sheet below `lg` (the same breakpoint the sidebar and
+          bottom tab bar switch on) upgrades every confirmation, form, and
+          moderation-action dialog at once -- matching the hand-rolled sheet
+          pattern the quiz palette already used (see quiz-runner.tsx), now
+          generalized here instead of staying one-off. */}
       <DialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface-raised p-6 shadow-xl",
-          "data-[state=open]:animate-fade-up",
+          "fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl border-t border-border bg-surface-raised p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-xl",
+          "data-[state=open]:animate-slide-in-bottom",
+          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:max-h-[85vh] lg:w-full lg:max-w-md lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-xl lg:border lg:p-6 lg:pb-6",
+          "lg:data-[state=open]:animate-fade-up",
           className,
         )}
         {...props}
       >
+        <div
+          aria-hidden="true"
+          className="mx-auto mb-3 h-1.5 w-10 shrink-0 rounded-full bg-border lg:hidden"
+        />
         {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <DialogPrimitive.Close className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <X className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

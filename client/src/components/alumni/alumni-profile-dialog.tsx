@@ -184,7 +184,7 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="currentRole">Current role</Label>
               <Input id="currentRole" placeholder="e.g. SDE II" {...register("currentRole")} />
@@ -195,7 +195,7 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="currentCompanyId">Company (if listed)</Label>
               <Controller
@@ -219,7 +219,7 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="department">Department</Label>
               <Input id="department" placeholder="e.g. EEE" {...register("department")} />
@@ -230,7 +230,7 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="skills">Skills (comma-separated)</Label>
               <Input id="skills" placeholder="DSA, System Design" {...register("skills")} />
@@ -253,7 +253,7 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
             <Label htmlFor="careerJourney">Career journey</Label>
             <textarea id="careerJourney" rows={2} className={textareaClass} {...register("careerJourney")} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="preparationStrategy">Preparation strategy</Label>
               <textarea id="preparationStrategy" rows={2} className={textareaClass} {...register("preparationStrategy")} />
@@ -263,7 +263,7 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
               <textarea id="interviewTips" rows={2} className={textareaClass} {...register("interviewTips")} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="resumeTips">Resume tips</Label>
               <textarea id="resumeTips" rows={2} className={textareaClass} {...register("resumeTips")} />
@@ -274,7 +274,7 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="linkedinUrl">LinkedIn (optional)</Label>
               <Input id="linkedinUrl" placeholder="https://linkedin.com/in/..." {...register("linkedinUrl")} />
@@ -289,7 +289,7 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2 rounded-lg border border-border-subtle p-3">
               <Label>Mentorship availability</Label>
               <p className="text-xs text-muted-foreground">

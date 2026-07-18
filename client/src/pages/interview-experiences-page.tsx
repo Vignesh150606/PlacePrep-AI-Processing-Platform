@@ -205,7 +205,7 @@ export function SubmissionDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="companyId">Company</Label>
               <Controller
@@ -229,7 +229,7 @@ export function SubmissionDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="employmentType">Type</Label>
               <Controller
@@ -279,7 +279,7 @@ export function SubmissionDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="graduationYear">Graduation year</Label>
               <Input id="graduationYear" type="number" {...register("graduationYear", { valueAsNumber: true })} />
@@ -355,7 +355,7 @@ export function SubmissionDialog({
             <textarea id="overallTips" className={textareaClass} {...register("overallTips")} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="keyTopics">Key topics (comma-separated)</Label>
               <Controller

@@ -228,7 +228,7 @@ function ManualCreateDialog({ open, onOpenChange }: { open: boolean; onOpenChang
             <Label htmlFor="manual-company">Current company</Label>
             <Input id="manual-company" value={currentCompanyName} onChange={(e) => setCurrentCompanyName(e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="manual-department">Department</Label>
               <Input id="manual-department" value={department} onChange={(e) => setDepartment(e.target.value)} />

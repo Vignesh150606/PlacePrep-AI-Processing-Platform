@@ -3,7 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- MODIFIED (Phase 14, Part 1 -- Mobile Experience & PWA):
+         viewport-fit=cover lets content use env(safe-area-inset-*) to sit
+         correctly around notches / home indicators instead of under them.
+         The apple-mobile-web-app-* trio is iOS Safari's own pre-manifest
+         mechanism for "open full-screen from the home screen, no browser
+         chrome" -- iOS still honors these even though it also reads the
+         web app manifest for icons/name. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#6e56cf" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PlacePrep" />
     <title>PlacePrep — Placement Intelligence Platform</title>
     <script>
       (function () {

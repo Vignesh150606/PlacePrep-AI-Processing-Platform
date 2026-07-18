@@ -14,9 +14,14 @@ import { QueryProvider } from "./providers/query-provider";
 import { AuthProvider } from "./providers/auth-provider";
 import { useAuth } from "./hooks/use-auth";
 import { AppErrorBoundary } from "./components/layout/error-boundary";
+import { usePwaUpdate } from "./hooks/use-pwa-update";
 
 function RouterShell() {
   const auth = useAuth();
+  // NEW (Phase 14, Part 1 -- Mobile Experience & PWA): mounted above the
+  // auth gate so the update-available/offline-ready toasts fire regardless
+  // of whether the person is signed in yet.
+  usePwaUpdate();
 
   if (auth.isLoading) {
     return (

@@ -170,7 +170,7 @@ export function ResourceSubmissionDialog({ open, onOpenChange }: ResourceSubmiss
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="category">Category</Label>
               <Controller
@@ -205,7 +205,7 @@ export function ResourceSubmissionDialog({ open, onOpenChange }: ResourceSubmiss
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="subjectId">Subject</Label>
               <Controller
@@ -259,7 +259,7 @@ export function ResourceSubmissionDialog({ open, onOpenChange }: ResourceSubmiss
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="tags">Tags (comma-separated)</Label>
               <Input id="tags" placeholder="dbms, normalization" {...register("tags")} />
