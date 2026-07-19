@@ -66,6 +66,9 @@ class DashboardSummary(CamelModel):
     # Phase 15, Part 1 -- Question Lifecycle Management.
     archived_question_count: int
     deleted_question_count: int
+    # Phase 15, Part 2 (Slice A) -- Resource Lifecycle Management.
+    archived_resource_count: int
+    deleted_resource_count: int
 
 
 class AdminUserResponse(CamelModel):
@@ -128,8 +131,16 @@ async def get_dashboard_summary(_admin: CurrentUser = Depends(require_admin)):
         .eq("status", "pending-review")
         .execute()
     )
+    # Phase 15, Part 2: also needs the `deleted_at is null` filter --
+    # same fix Part 1 already made to `pending_questions` above (a soft-
+    # deleted-while-pending-review resource shouldn't still count as
+    # "pending review" once it's been deleted).
     pending_resources = (
-        admin.table("resources").select("id", count="exact").eq("status", "pending-review").execute()
+        admin.table("resources")
+        .select("id", count="exact")
+        .eq("status", "pending-review")
+        .is_("deleted_at", "null")
+        .execute()
     )
     pending_alumni = (
         admin.table("alumni_profiles").select("id", count="exact").eq("verification_status", "pending-review").execute()
@@ -146,6 +157,16 @@ async def get_dashboard_summary(_admin: CurrentUser = Depends(require_admin)):
     )
     deleted_questions = (
         admin.table("questions").select("id", count="exact").not_.is_("deleted_at", "null").execute()
+    )
+    archived_resources = (
+        admin.table("resources")
+        .select("id", count="exact")
+        .eq("status", "archived")
+        .is_("deleted_at", "null")
+        .execute()
+    )
+    deleted_resources = (
+        admin.table("resources").select("id", count="exact").not_.is_("deleted_at", "null").execute()
     )
 
     # No count=exact groupby support over a join here, so pull the (small)
@@ -178,6 +199,8 @@ async def get_dashboard_summary(_admin: CurrentUser = Depends(require_admin)):
         total_admins=total_admins.count or 0,
         archived_question_count=archived_questions.count or 0,
         deleted_question_count=deleted_questions.count or 0,
+        archived_resource_count=archived_resources.count or 0,
+        deleted_resource_count=deleted_resources.count or 0,
     )
     return ok(data=summary, message="Dashboard summary fetched.")
 

@@ -16,6 +16,9 @@ export interface AdminDashboardSummary {
   /** Phase 15, Part 1 -- Question Lifecycle Management. */
   archivedQuestionCount: number;
   deletedQuestionCount: number;
+  /** Phase 15, Part 2 (Slice A) -- Resource Lifecycle Management. */
+  archivedResourceCount: number;
+  deletedResourceCount: number;
 }
 
 /** Admin user rows only ever need a slice of `Profile` -- there's no
@@ -105,7 +108,17 @@ export type AuditAction =
   | "question-bulk-unarchived"
   | "question-bulk-restored"
   | "question-bulk-deleted"
-  | "question-bulk-permanently-deleted";
+  | "question-bulk-permanently-deleted"
+  // Phase 15, Part 2 (Slice A) -- Resource Lifecycle Management.
+  | "resource-archived"
+  | "resource-unarchived"
+  | "resource-restored"
+  | "resource-permanently-deleted"
+  | "resource-bulk-updated"
+  | "resource-bulk-archived"
+  | "resource-bulk-unarchived"
+  | "resource-bulk-restored"
+  | "resource-bulk-permanently-deleted";
 
 export type AuditTargetType = "pdf" | "question" | "interview-experience" | "user" | "resource" | "alumni";
 

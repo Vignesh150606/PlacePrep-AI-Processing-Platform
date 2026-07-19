@@ -1,82 +1,197 @@
 # PlacePrep Project State
 
-Last updated: 2026-07-19 (Phase 15, Part 1 -- Question Lifecycle Management & Question Bank Admin UX)
+Last updated: 2026-07-19 (Phase 15, Part 2, Slice A -- Resource Lifecycle Management + Shared Lifecycle Framework)
 
 ## This pass, in one paragraph
 
-Phase 15, Part 1 of a twelve-feature "Content Management & Production
-Administration" brief -- Question Lifecycle Management (Feature 1) and
-Question Bank Admin UX (Feature 2), plus the Questions-only slices of
-Audit Logs (Feature 8) and Analytics (Feature 9) those two features
-directly enable. Audited first, as always: read every `questions.py`
-endpoint, the full schema (`questions`, `question_topics`,
-`question_companies`, `admin_audit_logs`), and every downstream consumer
-of `status = 'approved'` (Question Bank, Search, Daily Challenge, the
-admin dashboard's counts) before writing anything, per this project's own
-practice. Two genuinely new schema concepts -- `archived_at`/`archived_by`
-and `deleted_at`/`deleted_by`, both nullable and independent of `status`
--- plus one new status value, `'archived'` (migration 0016). "Published"
-is deliberately **not** a third: `PATCH /{id}/publish` already moved a
-draft straight to `'approved'` since Phase 13, and every downstream
-consumer already treated `'approved'` as "live" -- adding a second,
-functionally-identical status would have been a duplicate concept, not a
-new one. Delete changed from a real `DELETE` to a soft delete (the brief:
-"Deletion should NEVER immediately remove data") -- a new "Permanent
-Delete" endpoint is the actual irreversible one now. Every lifecycle
-transition (approve/reject/publish/archive/unarchive/restore/soft-delete/
-permanent-delete) lives in exactly one shared helper function, called by
-both the single-item endpoint and the new `POST /questions/bulk-action`
-loop -- not duplicated between them. A second bulk endpoint,
-`PATCH /questions/bulk-update`, covers the brief's five separate "Bulk
-Subject/Topic/Company/Difficulty/Tags Update" asks as one flexible call
-(reusing `classification.py`'s existing get-or-create helpers rather than
-a second resolution path) rather than five near-identical endpoints. The
-frontend's old single-purpose "Review Queue" page (pending-review
-questions only, no bulk anything) became "Manage Questions": six lifecycle
-tabs, a source filter, debounced search, pagination, multi-select with a
-context-aware bulk toolbar, a bulk field-edit dialog, and an "Undo" toast
-action wired to whichever bulk actions have a clean one-call inverse
-(archive/unarchive/delete -- approve/reject/publish/permanent-delete
-deliberately don't get one). Soft-deleted questions are now excluded
-everywhere the brief asked for (`list_questions`, `search.py`,
-`daily_challenge.py`'s two selection queries, the admin dashboard's
-pending-review count) -- audited by grepping every `.table("questions")`
-call in the server, not assumed. A new admin-only analytics endpoint
-(status/source-type breakdown, approval rate, 30-day growth by day,
-moderator activity from `admin_audit_logs`, bulk-import duplicate totals)
-backs two new dashboard stat cards. `admin_audit_logs`' action check
-constraint gained 13 new values (archived/unarchived/restored/
-permanently-deleted plus bulk variants of each, plus bulk-updated); the
-frontend's `AuditAction` union, and the audit log page's three
-`Record<AuditAction, ...>` maps, were extended to match (a genuinely
-pre-existing gap -- the frontend's `AuditAction` union was already
-missing `question-published`, `question-bulk-imported`, and every
-`community-*` action from Phases 12/13 -- was noticed but deliberately
-left alone; fixing it wasn't this phase's brief). Also fixed in passing,
-because it sat directly in the file being rewritten and the very feature
-being built depended on it working: the old admin questions hook sent a
-`sourceType` query parameter, but the backend's FastAPI `Query()` params
-are snake_case (`source_type`) with no camelCase aliasing -- an
-unrecognized query key is silently dropped, not an error, so that source
-filter had likely never actually filtered anything. Verified: Python
-byte-compiles clean, `ruff check` passes with zero errors, a live import
-of `app.main` registers all 114 routes, and a Starlette route-matching
-simulation specifically confirmed `PATCH /questions/bulk-update` resolves
-to the new bulk endpoint and not `PATCH /{question_id}` (both are
-single-path-segment PATCH routes -- a real collision risk this project's
-router had never had before, avoided by registering `bulk-update` first).
-`pnpm install`, `pnpm -r typecheck`, `pnpm -r lint`, and `pnpm -r build`
-(including the PWA service-worker build from Phase 14) all pass clean.
-Everything else in the twelve-feature brief -- the same archive/soft-
-delete/bulk pattern applied to Resources, Interview Experiences,
-Community, and Alumni (each already has its own approve/reject/edit/
-delete-style moderation from earlier phases; this pass didn't touch any
-of them), Company Management (there is no admin CRUD for `companies` at
-all today -- rows only ever come from `classification.py`'s
-get-or-create-on-first-use), and the non-Questions slices of Analytics --
-is Phase 15, Part 2, deliberately deferred the same way Phase 14's Part 2
-was. See "Not yet built" in `README.md` and this file's Phase 15 detail
-section below.
+Phase 15, Part 2, Slice A -- of the broader "Global Content Management &
+Production Administration" brief (Resources, Interview Experiences,
+Community, Alumni, Company Management, plus the cross-cutting Analytics/
+Audit/Shared-Framework/UX/Security features). This pass delivered Resource
+Lifecycle Management (Feature 1) and the genuine two-caller extraction of
+Part 1's per-question archive/soft-delete pattern into a Shared Lifecycle
+Framework (Feature 8), plus the Resources-only slices of Analytics
+(Feature 6) and Audit (Feature 7) those two directly enable. Interview
+Experience Management, Community Moderation, Alumni Management, and
+Company Management (which still doesn't exist as an admin module at all)
+remain deferred to a further pass -- the same split-brief decision this
+project already made for Phase 14 and Phase 15 Part 1, for the same
+reason: attempting all five content types' lifecycles plus the
+cross-cutting systems in one pass, at reduced depth each, would have
+violated the brief's own "no partial implementations" bar. Audited first:
+read `resources.py` end-to-end, `questions.py`'s Part 1 lifecycle helpers
+and `bulk_question_action`, migration 0016, and grepped every
+`.table("resources")` call in the server (only `resources.py` itself and
+`admin.py`'s dashboard count -- unlike `questions`, resources have no
+`search.py` or `daily_challenge.py` touchpoint) before writing anything.
+Same two nullable column pairs as Part 1 (`archived_at`/`archived_by`,
+`deleted_at`/`deleted_by`), same new status value (`'archived'`, migration
+0017), same reasoning for no separate "published" status. `DELETE /{id}`
+changed from a real delete (which also did best-effort file-storage
+cleanup) to a soft delete; the storage cleanup moved to the new, actually
+irreversible `DELETE /{id}/permanent`. `POST /bulk-action` gained bulk
+archive/unarchive/restore/permanent-delete alongside its original
+approve/reject/delete; a new `PATCH /bulk-update` covers "Bulk Category
+Update"/"Bulk Tag Update" as one endpoint, mirroring `bulk_update_
+questions`'s shape (two fields instead of five -- a resource has no
+subject/topic/company/difficulty bulk fields). `list_resources` gained a
+`deleted` query param with the same admin-only, mutually-exclusive-with-
+every-other-tab semantics `list_questions` already had. Feature 8 is a
+genuine extraction, not a rename: a new `app/services/lifecycle.py` holds
+`archive_row`/`unarchive_row`/`soft_delete_row`/`restore_row`/
+`permanent_delete_row`/`run_bulk`, and BOTH `questions.py` (refactored) and
+`resources.py` (new) call into it -- `questions.py`'s five per-question
+helpers and its bulk-action loop were rewritten to delegate rather than
+keeping a second copy of the same SQL shapes, Part 1's behavior otherwise
+unchanged (one small, deliberate, non-behavioral difference: validation-
+error wording is now generated from a `noun` parameter instead of
+hardcoded per table). `_approve_or_reject_one`/`_publish_one` deliberately
+stayed put, not pulled into the shared module -- their notification/
+duplicate-recheck side effects are genuinely table-specific. A new
+Resources-only analytics endpoint (status/category breakdown, approval
+rate, 30-day growth, moderator activity) backs two new dashboard stat
+cards; `admin.py`'s pending-resource count also picked up the same
+`deleted_at is null` fix Part 1 made for questions. `admin_audit_logs`'
+action check constraint gained 9 new values; the frontend's `AuditAction`
+union and the audit log page's label/badge maps were extended to match
+(verified programmatically -- union, filter array, and both maps all agree
+on exactly 48 actions). The frontend's old "Pending Resources" page (one
+status filter, no search, no pagination, `pageSize: 100` loaded in one
+shot) became "Manage Resources": the same tabs-plus-search-plus-category-
+filter-plus-pagination-plus-multi-select-plus-bulk-toolbar-plus-Undo-toast
+shape "Manage Questions" already established (no "Drafts" tab -- a
+resource is never manually drafted the way an admin-authored question
+can be). Verified: Python byte-compiles clean, `ruff check` passes with
+zero errors, a live import of `app.main` registers all 120 routes, and --
+learning from Part 1's own note that this kind of routing collision "had
+never happened before" -- a live dispatch test (not just a route-list
+inspection, mocking `lifecycle.run_bulk` to prove which function actually
+ran) confirms `PATCH /resources/bulk-update` invokes `bulk_update_
+resources`, not `update_resource` via a swallowed `{resource_id}=
+"bulk-update"`. The shared `lifecycle.py` functions were also unit-tested
+directly against a mocked Supabase client: correct update payloads on the
+happy path, correct validation-error wording and status codes on each
+rejected transition, correct succeeded/failed split in `run_bulk`. `pnpm
+install`, `pnpm -r typecheck`, `pnpm -r lint` (zero errors -- the one
+warning is the pre-existing, untouched `main.tsx` fast-refresh warning),
+and `pnpm -r build` (including the PWA service-worker build) all pass
+clean. Everything else in the Part 2 scope -- Interview Experience
+Management, Community Moderation, Alumni Management, Company Management
+(still no admin CRUD for `companies` at all -- rows only ever come from
+`classification.py`'s get-or-create-on-first-use), and the non-Resources
+slices of Analytics/Audit -- remains deferred. See "Not yet built" in
+`README.md` and this file's Phase 15 Part 2 detail section below.
+
+## Phase 15 -- Global Content Management & Production Administration (Part 2, Slice A) detail
+
+**The brief.** A ten-feature "Global Content Management & Production
+Administration" brief, extending Part 1's Question Lifecycle pattern to
+every remaining content type (Resources, Interview Experiences, Community,
+Alumni), adding a Company Management module that doesn't exist yet, and
+building out the cross-cutting Analytics/Audit/Shared-Framework/Admin-UX/
+Security features those all share. This slice covers Feature 1 (Resource
+Management) plus Feature 8 (Shared Lifecycle Framework) end-to-end, and
+the Resources-only edges of Features 6 and 7. Features 2-5 (Interview
+Experience, Community, Alumni, Company) are untouched.
+
+**Schema (migration 0017).** Same shape as migration 0016: `resources`
+gained `archived_at`/`archived_by` (nullable timestamptz/uuid) and
+`deleted_at`/`deleted_by` (same), plus `'archived'` added to the existing
+`status` check constraint (`'pending-review' | 'approved' | 'rejected' |
+'archived'`). Two new indexes on `deleted_at`/`archived_at`. The
+`admin_audit_logs` action check constraint was dropped and re-added with
+the full existing list plus 9 new resource actions -- verified
+programmatically (a small script diffing the two migrations' constraint
+bodies) that nothing existing was dropped.
+
+**Feature 8, done as a real extraction.** `app/services/lifecycle.py` is
+new: `archive_row`/`unarchive_row`/`soft_delete_row`/`restore_row`/
+`permanent_delete_row` (each taking a `table` name, a `fetch_or_404`
+callable, and a `noun` for error wording) plus `run_bulk` (the loop-and-
+collect-succeeded/failed shape both `questions.py`'s and `resources.py`'s
+bulk endpoints already had their own copy of). `questions.py`'s
+`_archive_one`/`_unarchive_one`/`_soft_delete_one`/`_restore_one`/
+`_permanent_delete_one` were rewritten to delegate to it, and
+`bulk_question_action`'s manual try/except loop now calls `lifecycle.
+run_bulk`. This was a deliberate, low-risk, behavior-preserving refactor
+of already-shipped Part 1 code -- not something taken lightly given "DO
+NOT rewrite working code" -- verified by re-running the full Part 1
+verification suite afterward (typecheck/lint/build/ruff/route-registration
+all still pass) plus new unit tests directly against the shared module.
+`_approve_or_reject_one`/`_publish_one` stayed in `questions.py`
+unmodified -- notification calls and duplicate-recheck side effects are
+table-specific, not a shape `resources.py` needs.
+
+**Resources' lifecycle, mapped onto the shared framework.**
+`DELETE /{resource_id}` used to do a real `delete()` plus best-effort
+storage cleanup unconditionally; it's now `_soft_delete_one` (via
+`lifecycle.soft_delete_row`), and the storage cleanup moved into the new
+`_permanent_delete_one` / `DELETE /{resource_id}/permanent`. New
+`PATCH /{resource_id}/archive`, `/unarchive`, `/restore` round out the
+single-item surface. `POST /bulk-action` (already existed, for approve/
+reject/delete) gained archive/unarchive/restore/permanent-delete, using
+`lifecycle.run_bulk` instead of its own hand-rolled loop; its response
+gained `undoAction` (archive<->unarchive, delete->restore -- same set
+Part 1 used, approve/reject/permanent-delete excluded for the same
+reason: no clean inverse). A small polish while touching this endpoint:
+the toast message used to build past-tense wording by naively appending
+"d" to the action name (`"delete" + "d"` reads fine, but a hypothetical
+`"permanent-delete" + "d"` would not have) -- replaced with an explicit
+`_BULK_ACTION_PAST_TENSE` map.
+
+**`PATCH /bulk-update` -- registration-order hazard, avoided the same way
+Part 1 first found it.** `bulk-update` and `{resource_id}` are both
+single-path-segment PATCH routes, so `bulk-update` had to be registered
+before `update_resource` or it would be swallowed as a `resource_id`
+value. Registered correctly; verified not just by listing routes but by a
+live `TestClient` dispatch with `lifecycle.run_bulk` mocked to raise a
+sentinel -- the traceback confirms `resources.py`'s `bulk_update_
+resources` (not `update_resource`) is what actually runs.
+
+**`list_resources`'s Deleted tab.** Added a `deleted` query param with
+identical semantics to `list_questions`': non-admins get 403 if they ask
+for it; admins get ONLY soft-deleted rows when true, everything else
+(status filter included) when false. `_get_resource_or_404` was left
+alone -- it still fetches regardless of deleted state, since restore/
+permanent-delete need to find already-deleted rows.
+
+**Analytics (Feature 6, Resources-only).** `GET /resources/analytics/
+summary`: status/category breakdowns (`count="exact"` per value, not a
+full scan), archived/deleted counts, approval rate, a 30-day growth
+series and moderator-activity leaderboard both aggregated from a single
+bounded fetch (not per-day/per-admin round trips) -- same shape as
+`questions.py`'s analytics endpoint. Backs two new dashboard stat cards
+(archived/deleted resource counts); `admin.py`'s `pending_resources` count
+also picked up the `deleted_at is null` filter it was missing (the same
+gap Part 1 fixed for `pending_questions`).
+
+**Frontend: "Manage Resources."** Replaces the old admin-resources-page.tsx
+(one status filter via a plain `<select>`, no search, no pagination --
+`useResources({ status, pageSize: 100 })` loaded everything in one shot).
+Now: five tabs (Pending review / Approved / Archived / Rejected / Deleted
+-- no Drafts tab, resources are never manually drafted), a debounced
+search box, a category filter, real pagination (`PAGE_SIZE = 20`),
+multi-select with a context-aware bulk toolbar (which buttons show depends
+on the active tab, same `showApprove Reject`/`showArchive`/`showUnarchive`/
+`showRestore`/`showPermanentDelete`/`showDelete` flags Manage Questions
+uses), a bulk-edit dialog (category + add-tags, two fields instead of
+Questions' five), and an Undo toast wired to `bulkAction`'s `undoAction`.
+The existing `RejectDialog` and `EditResourceDialog` components carried
+over unchanged -- both already worked, and Part 1's own convention is to
+reuse rather than rebuild already-good UI. New `useResourceLifecycle`
+(archive/unarchive/restore/permanentDelete) and `useBulkUpdateResources`
+hooks in `use-resources.ts`, mirroring `use-admin-questions.ts`'s
+`useQuestionLifecycle`/`useBulkUpdateQuestions` shape exactly.
+
+**What this slice deliberately did NOT touch** (remains Phase 15, Part 2,
+future slices): Interview Experience Management, Community Moderation,
+and Alumni Management (each already has its own approve/reject/edit/
+delete-style moderation from earlier phases; none of it was touched this
+pass), Company Management (still no admin CRUD for `companies` at all --
+rows only ever come from `classification.py`'s get-or-create-on-first-use,
+and there is no merge/logo-upload/hiring-stats surface), and the non-
+Resources slices of Analytics (Feature 6) and the Global Audit System's
+"Export" feature (Feature 7).
 
 ## Phase 15 -- Content Management & Production Administration (Part 1) detail
 

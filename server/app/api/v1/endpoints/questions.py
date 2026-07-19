@@ -40,7 +40,7 @@ from app.core.rate_limit import upload_limit
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
-from app.services import audit, notifications, question_authoring, question_merge
+from app.services import audit, lifecycle, notifications, question_authoring, question_merge
 
 router = APIRouter()
 
@@ -564,42 +564,23 @@ def _publish_one(question_id: str) -> None:
 
 
 def _archive_one(question_id: str, admin_id: str) -> None:
-    row = _get_question_or_404(question_id)
-    if row["status"] != "approved":
-        raise AppException(
-            f"Only approved (published) questions can be archived -- this one is '{row['status']}'.",
-            status_code=422,
-        )
-    get_supabase_admin().table("questions").update(
-        {"status": "archived", "archived_at": _now_iso(), "archived_by": admin_id}
-    ).eq("id", question_id).execute()
+    lifecycle.archive_row(
+        "questions", question_id, admin_id, fetch_or_404=_get_question_or_404, noun="question",
+    )
 
 
 def _unarchive_one(question_id: str) -> None:
-    row = _get_question_or_404(question_id)
-    if row["status"] != "archived":
-        raise AppException(f"Question is '{row['status']}', not archived.", status_code=422)
-    get_supabase_admin().table("questions").update(
-        {"status": "approved", "archived_at": None, "archived_by": None}
-    ).eq("id", question_id).execute()
+    lifecycle.unarchive_row("questions", question_id, fetch_or_404=_get_question_or_404, noun="question")
 
 
 def _soft_delete_one(question_id: str, admin_id: str) -> None:
-    row = _get_question_or_404(question_id)
-    if row.get("deleted_at"):
-        raise AppException("Question is already deleted.", status_code=422)
-    get_supabase_admin().table("questions").update(
-        {"deleted_at": _now_iso(), "deleted_by": admin_id}
-    ).eq("id", question_id).execute()
+    lifecycle.soft_delete_row(
+        "questions", question_id, admin_id, fetch_or_404=_get_question_or_404, noun="question",
+    )
 
 
 def _restore_one(question_id: str) -> None:
-    row = _get_question_or_404(question_id)
-    if not row.get("deleted_at"):
-        raise AppException("Question isn't deleted.", status_code=422)
-    get_supabase_admin().table("questions").update(
-        {"deleted_at": None, "deleted_by": None}
-    ).eq("id", question_id).execute()
+    lifecycle.restore_row("questions", question_id, fetch_or_404=_get_question_or_404, noun="question")
 
 
 def _permanent_delete_one(question_id: str) -> None:
@@ -607,8 +588,7 @@ def _permanent_delete_one(question_id: str) -> None:
     time, same as `delete_question` used to do unconditionally before Phase
     15. `question_options`/`question_topics`/`question_companies` all cascade
     (migration 0001)."""
-    _get_question_or_404(question_id)
-    get_supabase_admin().table("questions").delete().eq("id", question_id).execute()
+    lifecycle.permanent_delete_row("questions", question_id, fetch_or_404=_get_question_or_404)
 
 
 @router.patch("/{question_id}/status", response_model=ApiResponse[QuestionResponse])
@@ -730,32 +710,25 @@ async def bulk_question_action(
     if payload.action == "reject" and not payload.rejection_reason:
         raise AppException("rejectionReason is required for bulk reject.", status_code=422)
 
-    succeeded: List[str] = []
-    failed: List[Dict[str, str]] = []
+    def _run_one(question_id: str) -> None:
+        if payload.action == "approve":
+            _approve_or_reject_one(question_id, "approved", admin_user.id)
+        elif payload.action == "reject":
+            _approve_or_reject_one(question_id, "rejected", admin_user.id, payload.rejection_reason)
+        elif payload.action == "publish":
+            _publish_one(question_id)
+        elif payload.action == "archive":
+            _archive_one(question_id, admin_user.id)
+        elif payload.action == "unarchive":
+            _unarchive_one(question_id)
+        elif payload.action == "restore":
+            _restore_one(question_id)
+        elif payload.action == "delete":
+            _soft_delete_one(question_id, admin_user.id)
+        elif payload.action == "permanent-delete":
+            _permanent_delete_one(question_id)
 
-    for question_id in payload.question_ids:
-        try:
-            if payload.action == "approve":
-                _approve_or_reject_one(question_id, "approved", admin_user.id)
-            elif payload.action == "reject":
-                _approve_or_reject_one(question_id, "rejected", admin_user.id, payload.rejection_reason)
-            elif payload.action == "publish":
-                _publish_one(question_id)
-            elif payload.action == "archive":
-                _archive_one(question_id, admin_user.id)
-            elif payload.action == "unarchive":
-                _unarchive_one(question_id)
-            elif payload.action == "restore":
-                _restore_one(question_id)
-            elif payload.action == "delete":
-                _soft_delete_one(question_id, admin_user.id)
-            elif payload.action == "permanent-delete":
-                _permanent_delete_one(question_id)
-            succeeded.append(question_id)
-        except NotFoundError:
-            failed.append({"id": question_id, "error": "Question not found."})
-        except AppException as exc:
-            failed.append({"id": question_id, "error": exc.message})
+    succeeded, failed = lifecycle.run_bulk(payload.question_ids, _run_one)
 
     bulk_audit_action = {
         "approve": "question-bulk-approved",

@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Resource,
+  ResourceAnalytics,
   ResourceBulkActionInput,
   ResourceBulkActionResult,
+  ResourceBulkUpdateInput,
+  ResourceBulkUpdateResult,
   ResourceDownload,
   ResourceFilters,
   ResourceStatusUpdateInput,
@@ -28,6 +31,9 @@ function buildQuery(filters: ResourceFilters): string {
   if (filters.tags?.length) params.set("tags", filters.tags.join(","));
   if (filters.status) params.set("status", filters.status);
   if (filters.sortBy) params.set("sort_by", filters.sortBy);
+  // Phase 15, Part 2 -- admin-only Deleted tab; see `list_resources`'s own
+  // docstring on why this is mutually exclusive with every other tab.
+  if (filters.deleted) params.set("deleted", "true");
   if (filters.page) params.set("page", String(filters.page));
   if (filters.pageSize) params.set("page_size", String(filters.pageSize));
   const qs = params.toString();
@@ -115,7 +121,10 @@ export function useUpdateResource() {
   });
 }
 
-/** Admin Moderation: Delete. */
+/** Admin Moderation: Delete. Phase 15, Part 2 -- this is now a soft delete
+ * (recoverable from the Deleted tab via `useResourceLifecycle().restore`),
+ * not a real row delete -- same change Part 1 already made to
+ * `useReviewQuestion`'s `remove`. */
 export function useDeleteResource() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -124,13 +133,64 @@ export function useDeleteResource() {
   });
 }
 
-/** Admin Moderation: Bulk Actions (approve/reject/delete many at once). */
+/** Phase 15, Part 2 (Slice A) -- Resource Lifecycle Management: single-
+ * resource archive/unarchive/restore/permanent-delete. Kept separate from
+ * `useDeleteResource`/`useUpdateResourceStatus` (which predate this phase)
+ * rather than folded in, same reasoning as `useQuestionLifecycle`. */
+export function useResourceLifecycle() {
+  const queryClient = useQueryClient();
+  const invalidate = () => invalidateResources(queryClient);
+
+  const archive = useMutation({
+    mutationFn: (resourceId: string) => apiPatch<Resource>(`/resources/${resourceId}/archive`, {}),
+    onSuccess: invalidate,
+  });
+  const unarchive = useMutation({
+    mutationFn: (resourceId: string) => apiPatch<Resource>(`/resources/${resourceId}/unarchive`, {}),
+    onSuccess: invalidate,
+  });
+  const restore = useMutation({
+    mutationFn: (resourceId: string) => apiPatch<Resource>(`/resources/${resourceId}/restore`, {}),
+    onSuccess: invalidate,
+  });
+  const permanentDelete = useMutation({
+    mutationFn: (resourceId: string) => apiDelete<null>(`/resources/${resourceId}/permanent`),
+    onSuccess: invalidate,
+  });
+
+  return { archive, unarchive, restore, permanentDelete };
+}
+
+/** Admin Moderation: Bulk Actions (approve/reject/delete/archive/unarchive/
+ * restore/permanent-delete many at once) -- extended in Phase 15, Part 2
+ * with the lifecycle actions, same shape as `useBulkQuestionAction`. */
 export function useBulkResourceAction() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: ResourceBulkActionInput) =>
       apiPost<ResourceBulkActionResult>("/resources/bulk-action", input),
     onSuccess: () => invalidateResources(queryClient),
+  });
+}
+
+/** Feature 1's bulk Category Update / Tags Update -- both fields on
+ * `ResourceBulkUpdateInput` are independently optional, same shape as
+ * `useBulkUpdateQuestions`. */
+export function useBulkUpdateResources() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ResourceBulkUpdateInput) =>
+      apiPatch<ResourceBulkUpdateResult>("/resources/bulk-update", input),
+    onSuccess: () => invalidateResources(queryClient),
+  });
+}
+
+/** Feature 6 (Analytics), scoped to resources. */
+export function useResourceAnalytics() {
+  return useQuery({
+    queryKey: ["resources", "admin", "analytics"],
+    queryFn: () => apiGet<ResourceAnalytics>("/resources/analytics/summary"),
+    staleTime: 60_000,
   });
 }
 

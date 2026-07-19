@@ -54,6 +54,16 @@ const ACTIONS: AuditAction[] = [
   "question-bulk-restored",
   "question-bulk-deleted",
   "question-bulk-permanently-deleted",
+  // Phase 15, Part 2 (Slice A) -- Resource Lifecycle Management.
+  "resource-archived",
+  "resource-unarchived",
+  "resource-restored",
+  "resource-permanently-deleted",
+  "resource-bulk-updated",
+  "resource-bulk-archived",
+  "resource-bulk-unarchived",
+  "resource-bulk-restored",
+  "resource-bulk-permanently-deleted",
 ];
 
 const TARGET_TYPES: AuditTargetType[] = ["pdf", "question", "interview-experience", "user", "resource", "alumni"];
@@ -99,6 +109,16 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "question-bulk-restored": "Bulk-restored questions",
   "question-bulk-deleted": "Bulk-deleted questions",
   "question-bulk-permanently-deleted": "Bulk-permanently-deleted questions",
+  // Phase 15, Part 2 (Slice A) -- Resource Lifecycle Management.
+  "resource-archived": "Archived a resource",
+  "resource-unarchived": "Unarchived a resource",
+  "resource-restored": "Restored a deleted resource",
+  "resource-permanently-deleted": "Permanently deleted a resource",
+  "resource-bulk-updated": "Bulk-updated resources",
+  "resource-bulk-archived": "Bulk-archived resources",
+  "resource-bulk-unarchived": "Bulk-unarchived resources",
+  "resource-bulk-restored": "Bulk-restored resources",
+  "resource-bulk-permanently-deleted": "Bulk-permanently-deleted resources",
 };
 
 const ACTION_BADGE_VARIANT: Record<AuditAction, "correct" | "incorrect" | "accent" | "warning" | "neutral"> = {
@@ -142,6 +162,16 @@ const ACTION_BADGE_VARIANT: Record<AuditAction, "correct" | "incorrect" | "accen
   "question-bulk-restored": "accent",
   "question-bulk-deleted": "incorrect",
   "question-bulk-permanently-deleted": "incorrect",
+  // Phase 15, Part 2 (Slice A) -- Resource Lifecycle Management.
+  "resource-archived": "warning",
+  "resource-unarchived": "accent",
+  "resource-restored": "accent",
+  "resource-permanently-deleted": "incorrect",
+  "resource-bulk-updated": "accent",
+  "resource-bulk-archived": "warning",
+  "resource-bulk-unarchived": "accent",
+  "resource-bulk-restored": "accent",
+  "resource-bulk-permanently-deleted": "incorrect",
 };
 
 const TARGET_LINK: Record<AuditTargetType, string | undefined> = {

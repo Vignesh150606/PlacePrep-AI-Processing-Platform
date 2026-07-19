@@ -119,6 +119,22 @@ function SummaryCards() {
           isLoading={isLoading}
         />
       </Link>
+      <Link to="/admin/resources">
+        <StatCard
+          label="Archived resources"
+          value={data?.archivedResourceCount ?? 0}
+          icon={Archive}
+          isLoading={isLoading}
+        />
+      </Link>
+      <Link to="/admin/resources">
+        <StatCard
+          label="Deleted resources"
+          value={data?.deletedResourceCount ?? 0}
+          icon={Trash2}
+          isLoading={isLoading}
+        />
+      </Link>
       <Link to="/admin/alumni">
         <StatCard
           label="Pending alumni verifications"

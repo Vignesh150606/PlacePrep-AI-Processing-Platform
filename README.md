@@ -116,11 +116,30 @@ Supabase project's SQL editor: `0001` through `0016`. Each is idempotent
   `admin_audit_logs` trail (13 new action types). "Published" is
   deliberately **not** a new status -- it's `"approved"` under the name
   the brief's lifecycle diagram uses; every downstream consumer already
-  treated it that way. The same archive/restore/bulk pattern for
-  Resources, Interview Experiences, Community, and Alumni, plus Company
-  Management (create/edit/archive/merge -- there was no admin company CRUD
-  at all before this phase) and the rest of Feature 9's analytics, is
-  Phase 15, Part 2 -- deliberately deferred; see "Not yet built" below.
+  treated it that way.
+- Resource Lifecycle Management (Phase 15, Part 2, Slice A) -- the
+  Resource Intelligence Hub's admin page is now "Manage Resources", the
+  same shape as "Manage Questions": every resource, in every lifecycle
+  state (pending review / approved / archived / rejected / deleted), one
+  page, with tabs, debounced search, a category filter, real pagination,
+  multi-select + a bulk toolbar (approve / reject / archive / unarchive /
+  restore / delete / permanently delete, contextual to the active tab), a
+  bulk field-edit dialog (category / add-tags -- one endpoint, not two),
+  and an "Undo" toast action on archive/unarchive/delete. Delete is now a
+  **soft delete** -- recoverable from the Deleted tab -- not the real row
+  delete (plus storage cleanup) it used to be unconditionally; a new
+  "Permanent Delete" is the actual irreversible one, reached from there.
+  A new admin-only analytics endpoint (status/category breakdown, approval
+  rate, 30-day growth, moderator activity) backs two new dashboard stat
+  cards (archived/deleted counts); everything is wired into
+  `admin_audit_logs` (9 new action types). The archive/soft-delete/bulk
+  pattern is now shared, real code (`app/services/lifecycle.py`) between
+  Questions and Resources, not two copies of the same shape -- see
+  `PROJECT_STATE.md`'s Phase 15 Part 2 entry. The same pattern for
+  Interview Experiences, Community, and Alumni, plus Company Management
+  (create/edit/archive/merge -- there is no admin company CRUD at all
+  today) and the rest of the brief's analytics/audit-export work, remains
+  deferred; see "Not yet built" below.
 - Global search (⌘K command palette) and Daily Challenge backend (with
   streak tracking)
 - Notifications (dropdown + standalone page), Dashboard, Company pages,
@@ -129,19 +148,20 @@ Supabase project's SQL editor: `0001` through `0016`. Each is idempotent
 
 ## Not yet built
 
-- Phase 15, Part 2 -- the rest of the Content Management & Production
-  Administration brief: archive/restore + bulk operations for Resources,
-  Interview Experiences, Community (posts/comments), and Alumni (each
-  already has approve/reject/edit/delete-style moderation from earlier
-  phases; Part 1 only added the archive/soft-delete/bulk layer for
-  Questions); Company Management (create/edit/archive/restore/merge --
-  today `companies` rows only ever come from `classification.py`'s
-  get-or-create-on-first-use, there's no admin CRUD surface for them at
-  all); and the non-question slices of Feature 9's analytics (Part 1's
-  new analytics endpoint is Questions-only). Deliberately split out the
-  same way Phase 14's Part 2 was -- see `PROJECT_STATE.md`'s Phase 15
-  entry for the full reasoning and exactly what Part 1 did and didn't
-  cover.
+- Phase 15, Part 2 (remaining slices) -- the rest of the Global Content
+  Management & Production Administration brief: archive/restore + bulk
+  operations for Interview Experiences, Community (posts/comments), and
+  Alumni (each already has approve/reject/edit/delete-style moderation
+  from earlier phases; Part 1 added the archive/soft-delete/bulk layer for
+  Questions, Part 2 Slice A added it for Resources -- both now share one
+  `app/services/lifecycle.py`); Company Management (create/edit/archive/
+  restore/merge -- today `companies` rows only ever come from
+  `classification.py`'s get-or-create-on-first-use, there's no admin CRUD
+  surface for them at all); and the non-Questions/non-Resources slices of
+  analytics, plus the Global Audit System's "Export" feature. Deliberately
+  split out the same way Phase 14's Part 2 was -- see `PROJECT_STATE.md`'s
+  Phase 15 entries for the full reasoning and exactly what's covered so
+  far.
 - Production hardening (Phase 14, Part 2) -- security review (auth/RBAC/
   input validation/rate limiting/CORS/security headers), a database audit
   (indexes, constraints, cascade behavior, slow queries), an API audit

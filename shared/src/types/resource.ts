@@ -1,4 +1,4 @@
-import type { DifficultyLevel, ISODateString, ModerationStatus, PaginatedResult } from "./common";
+import type { DifficultyLevel, ISODateString, PaginatedResult, ResourceLifecycleStatus } from "./common";
 
 /**
  * The 13 resource categories the Resource Intelligence Hub supports (see
@@ -66,7 +66,7 @@ export interface Resource {
   fileKind: ResourceFileKind | null;
   externalUrl: string | null;
   version: number;
-  status: ModerationStatus;
+  status: ResourceLifecycleStatus;
   reviewedBy: string | null;
   reviewedAt: ISODateString | null;
   rejectionReason: string | null;
@@ -74,6 +74,11 @@ export interface Resource {
   bookmarkCount: number;
   uploadedAt: ISODateString;
   updatedAt: ISODateString;
+  /** Phase 15, Part 2 (Slice A) -- Resource Lifecycle Management. */
+  archivedAt: ISODateString | null;
+  archivedBy: string | null;
+  deletedAt: ISODateString | null;
+  deletedBy: string | null;
 }
 
 export type ResourceListResult = PaginatedResult<Resource>;
@@ -86,8 +91,12 @@ export interface ResourceFilters {
   topicId?: string;
   difficulty?: DifficultyLevel;
   tags?: string[];
-  status?: ModerationStatus;
+  status?: ResourceLifecycleStatus;
   sortBy?: ResourceSortBy;
+  /** Phase 15, Part 2 -- admin-only Deleted tab; see `ResourceFilters`'s
+   * backend counterpart (`list_resources`'s `deleted` query param) for why
+   * this is mutually exclusive with `status` meaning anything else. */
+  deleted?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -131,7 +140,19 @@ export interface ResourceStatusUpdateInput {
   rejectionReason?: string;
 }
 
-export type ResourceBulkActionType = "approve" | "reject" | "delete";
+/** `POST /resources/bulk-action`'s `action` enum -- extended in Phase 15,
+ * Part 2 (Slice A) with archive/unarchive/restore/permanent-delete,
+ * mirroring `QuestionBulkActionType`'s shape (a resource's lifecycle now
+ * has the same states, just without the draft/publish ones only a
+ * manually-authored question can be in). */
+export type ResourceBulkActionType =
+  | "approve"
+  | "reject"
+  | "delete"
+  | "archive"
+  | "unarchive"
+  | "restore"
+  | "permanent-delete";
 
 export interface ResourceBulkActionInput {
   resourceIds: string[];
@@ -142,10 +163,54 @@ export interface ResourceBulkActionInput {
 export interface ResourceBulkActionResult {
   succeeded: string[];
   failed: { id: string; error: string }[];
+  /** Feature 1's "Undo when possible" -- set only for actions with a
+   * clean, one-call inverse (archive/unarchive/delete), same shape as
+   * `QuestionBulkActionResult.undoAction`. */
+  undoAction: ResourceBulkActionType | null;
+}
+
+/** `PATCH /resources/bulk-update` -- Phase 15, Part 2 (Slice A)'s Feature 1
+ * "Bulk Category Update" / "Bulk Tag Update" as one flexible call, mirroring
+ * `QuestionBulkUpdateInput`'s shape. `addTags` merges into each resource's
+ * existing tags rather than replacing them. */
+export interface ResourceBulkUpdateInput {
+  resourceIds: string[];
+  category?: ResourceCategory;
+  addTags?: string[];
+}
+
+export interface ResourceBulkUpdateResult {
+  succeeded: string[];
+  failed: { id: string; error: string }[];
 }
 
 export interface ResourceDownload {
   downloadUrl: string;
   kind: "file" | "external";
   downloadCount: number;
+}
+
+/** Feature 6 (Analytics), scoped to resources -- see the backend's
+ * `ResourceAnalyticsResponse` docstring for why interview-experience/
+ * alumni/community/company-wide analytics are a separate, deferred pass. */
+export interface ResourceGrowthPoint {
+  date: string;
+  count: number;
+}
+
+export interface ResourceModeratorActivityEntry {
+  adminId: string;
+  adminName: string;
+  actionCount: number;
+}
+
+export interface ResourceAnalytics {
+  byStatus: Record<string, number>;
+  byCategory: Record<string, number>;
+  totalActive: number;
+  archivedCount: number;
+  deletedCount: number;
+  approvalRate: number;
+  growthLast30Days: ResourceGrowthPoint[];
+  moderatorActivity: ResourceModeratorActivityEntry[];
 }
