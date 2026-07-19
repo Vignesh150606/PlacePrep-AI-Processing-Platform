@@ -15,7 +15,7 @@ const LABEL_OVERRIDES: Record<string, string> = {
   notifications: "Notifications",
   settings: "Settings",
   admin: "Admin",
-  review: "Review Queue",
+  review: "Manage Questions",
 };
 
 function humanize(segment: string): string {

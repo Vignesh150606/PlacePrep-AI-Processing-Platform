@@ -74,7 +74,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Admin",
     items: [
       { label: "Dashboard", href: "/admin", icon: Gauge, adminOnly: true },
-      { label: "Review Queue", href: "/admin/review", icon: ShieldCheck, adminOnly: true },
+      { label: "Manage Questions", href: "/admin/review", icon: ShieldCheck, adminOnly: true },
       { label: "Question Builder", href: "/admin/questions/new", icon: PenSquare, adminOnly: true },
       { label: "Bulk Import Questions", href: "/admin/questions/bulk-import", icon: UploadCloud, adminOnly: true },
       { label: "Pending Resources", href: "/admin/resources", icon: Library, adminOnly: true },

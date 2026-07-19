@@ -86,6 +86,9 @@ async def search(
         admin_client.table("questions")
         .select("id, question_text, difficulty, status")
         .ilike("question_text", like_pattern)
+        # Phase 15 -- soft-deleted questions never surface in search, admin
+        # or not; the admin "Deleted" tab (questions.py) is where those live.
+        .is_("deleted_at", "null")
         .limit(_RESULTS_PER_TYPE)
     )
     if not admin:

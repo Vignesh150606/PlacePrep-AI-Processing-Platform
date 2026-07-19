@@ -63,6 +63,9 @@ class DashboardSummary(CamelModel):
     failed_processing_jobs: int
     total_users: int
     total_admins: int
+    # Phase 15, Part 1 -- Question Lifecycle Management.
+    archived_question_count: int
+    deleted_question_count: int
 
 
 class AdminUserResponse(CamelModel):
@@ -113,7 +116,11 @@ async def get_dashboard_summary(_admin: CurrentUser = Depends(require_admin)):
         .execute()
     )
     pending_questions = (
-        admin.table("questions").select("id", count="exact").eq("status", "pending-review").execute()
+        admin.table("questions")
+        .select("id", count="exact")
+        .eq("status", "pending-review")
+        .is_("deleted_at", "null")
+        .execute()
     )
     pending_experiences = (
         admin.table("interview_experiences")
@@ -130,6 +137,16 @@ async def get_dashboard_summary(_admin: CurrentUser = Depends(require_admin)):
     failed_jobs = admin.table("processing_jobs").select("id", count="exact").eq("status", "failed").execute()
     total_users = admin.table("profiles").select("id", count="exact").execute()
     total_admins = admin.table("profiles").select("id", count="exact").eq("role_id", 3).execute()
+    archived_questions = (
+        admin.table("questions")
+        .select("id", count="exact")
+        .eq("status", "archived")
+        .is_("deleted_at", "null")
+        .execute()
+    )
+    deleted_questions = (
+        admin.table("questions").select("id", count="exact").not_.is_("deleted_at", "null").execute()
+    )
 
     # No count=exact groupby support over a join here, so pull the (small)
     # reports table and de-dupe by experience_id in Python -- same approach
@@ -159,6 +176,8 @@ async def get_dashboard_summary(_admin: CurrentUser = Depends(require_admin)):
         failed_processing_jobs=failed_jobs.count or 0,
         total_users=total_users.count or 0,
         total_admins=total_admins.count or 0,
+        archived_question_count=archived_questions.count or 0,
+        deleted_question_count=deleted_questions.count or 0,
     )
     return ok(data=summary, message="Dashboard summary fetched.")
 

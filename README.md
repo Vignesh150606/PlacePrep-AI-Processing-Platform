@@ -36,7 +36,7 @@ direct image upload need).
 ## Database
 
 Apply every migration in `supabase/migrations/`, **in order**, via your
-Supabase project's SQL editor: `0001` through `0015`. Each is idempotent
+Supabase project's SQL editor: `0001` through `0016`. Each is idempotent
 (safe to re-run), but they are not independent of each other.
 
 ## What's here (see `PROJECT_STATE.md` for the full, current status)
@@ -48,8 +48,9 @@ Supabase project's SQL editor: `0001` through `0015`. Each is idempotent
   validation -> duplicate detection -> classification -> storage -> cleanup
   -> notification pipeline
 - Question Bank, Quiz Engine (with resume/timer/palette), Quiz Attempts,
-  Wrong Answer Notebook, Bookmarks, Analytics, Admin Review
-  (approve/reject/edit/delete/**merge**)
+  Wrong Answer Notebook, Bookmarks, Analytics, and full Question Lifecycle
+  Management (Phase 15, Part 1 -- see below; supersedes the old "Admin
+  Review" approve/reject/edit/delete/merge feature set)
 - Resource Intelligence Hub (cheat sheets, formula sheets, roadmaps,
   previous papers, links, videos -- submission + admin moderation)
 - Interview Experience Repository (anonymity, round-by-round breakdown,
@@ -94,6 +95,32 @@ Supabase project's SQL editor: `0001` through `0015`. Each is idempotent
   for all 22 non-landing pages, and touch-target/form-layout fixes.
   Production hardening (Phase 14, Part 2) is deliberately deferred -- see
   "Not yet built" below.
+- Question Lifecycle Management & Question Bank Admin UX (Phase 15, Part
+  1) -- the Question Bank's "Admin Review" page is now "Manage Questions":
+  every question, in every lifecycle state (draft / pending review /
+  approved / archived / rejected / deleted), one page, with tabs, search,
+  a source filter, pagination, multi-select + a bulk toolbar (approve /
+  reject / publish / archive / unarchive / restore / delete / permanently
+  delete, contextual to the active tab), a bulk field-edit dialog
+  (subject / topic / company / difficulty / add-tags, each independently
+  optional -- one endpoint, not five), and an "Undo" toast action on
+  archive/unarchive/delete. Delete is now a **soft delete** -- recoverable
+  from the Deleted tab -- not the real row delete it used to be; a new
+  "Permanent Delete" is the actual irreversible one, reached from there.
+  Soft-deleted questions disappear from the Question Bank, Quiz Engine,
+  Company pages, Search, and the Daily Challenge (all patched to filter
+  them out), same as the brief asked. A new admin-only analytics endpoint
+  (status/source-type breakdown, approval rate, 30-day growth, moderator
+  activity, bulk-import duplicate totals) backs two new dashboard stat
+  cards (archived/deleted counts); everything is wired into the existing
+  `admin_audit_logs` trail (13 new action types). "Published" is
+  deliberately **not** a new status -- it's `"approved"` under the name
+  the brief's lifecycle diagram uses; every downstream consumer already
+  treated it that way. The same archive/restore/bulk pattern for
+  Resources, Interview Experiences, Community, and Alumni, plus Company
+  Management (create/edit/archive/merge -- there was no admin company CRUD
+  at all before this phase) and the rest of Feature 9's analytics, is
+  Phase 15, Part 2 -- deliberately deferred; see "Not yet built" below.
 - Global search (⌘K command palette) and Daily Challenge backend (with
   streak tracking)
 - Notifications (dropdown + standalone page), Dashboard, Company pages,
@@ -102,6 +129,19 @@ Supabase project's SQL editor: `0001` through `0015`. Each is idempotent
 
 ## Not yet built
 
+- Phase 15, Part 2 -- the rest of the Content Management & Production
+  Administration brief: archive/restore + bulk operations for Resources,
+  Interview Experiences, Community (posts/comments), and Alumni (each
+  already has approve/reject/edit/delete-style moderation from earlier
+  phases; Part 1 only added the archive/soft-delete/bulk layer for
+  Questions); Company Management (create/edit/archive/restore/merge --
+  today `companies` rows only ever come from `classification.py`'s
+  get-or-create-on-first-use, there's no admin CRUD surface for them at
+  all); and the non-question slices of Feature 9's analytics (Part 1's
+  new analytics endpoint is Questions-only). Deliberately split out the
+  same way Phase 14's Part 2 was -- see `PROJECT_STATE.md`'s Phase 15
+  entry for the full reasoning and exactly what Part 1 did and didn't
+  cover.
 - Production hardening (Phase 14, Part 2) -- security review (auth/RBAC/
   input validation/rate limiting/CORS/security headers), a database audit
   (indexes, constraints, cascade behavior, slow queries), an API audit

@@ -13,6 +13,9 @@ export interface AdminDashboardSummary {
   failedProcessingJobs: number;
   totalUsers: number;
   totalAdmins: number;
+  /** Phase 15, Part 1 -- Question Lifecycle Management. */
+  archivedQuestionCount: number;
+  deletedQuestionCount: number;
 }
 
 /** Admin user rows only ever need a slice of `Profile` -- there's no
@@ -88,7 +91,21 @@ export type AuditAction =
   | "alumni-suspended"
   | "alumni-verification-removed"
   | "alumni-deleted"
-  | "alumni-manual-created";
+  | "alumni-manual-created"
+  // Phase 15, Part 1 -- Question Lifecycle Management.
+  | "question-archived"
+  | "question-unarchived"
+  | "question-restored"
+  | "question-permanently-deleted"
+  | "question-bulk-updated"
+  | "question-bulk-approved"
+  | "question-bulk-rejected"
+  | "question-bulk-published"
+  | "question-bulk-archived"
+  | "question-bulk-unarchived"
+  | "question-bulk-restored"
+  | "question-bulk-deleted"
+  | "question-bulk-permanently-deleted";
 
 export type AuditTargetType = "pdf" | "question" | "interview-experience" | "user" | "resource" | "alumni";
 

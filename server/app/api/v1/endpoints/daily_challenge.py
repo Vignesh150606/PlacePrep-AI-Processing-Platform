@@ -143,6 +143,7 @@ def _generate_today_challenge(admin, user_id: str) -> Dict[str, Any]:
             admin.table("questions")
             .select("id")
             .eq("status", "approved")
+            .is_("deleted_at", "null")
             .eq("topic", topic)
             .not_.in_("id", selected_ids or ["00000000-0000-0000-0000-000000000000"])
             .limit(3)
@@ -163,6 +164,7 @@ def _generate_today_challenge(admin, user_id: str) -> Dict[str, Any]:
             admin.table("questions")
             .select("id")
             .eq("status", "approved")
+            .is_("deleted_at", "null")
             .not_.in_("id", exclude)
             .limit(remaining_slots * 5)  # overfetch, then sample client-side for variety
             .execute()

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
 import {
+  Archive,
   ChevronLeft,
   ChevronRight,
   FileStack,
@@ -9,6 +10,7 @@ import {
   Library,
   MessagesSquare,
   ShieldCheck,
+  Trash2,
   Users,
   XCircle,
 } from "lucide-react";
@@ -74,6 +76,22 @@ function SummaryCards() {
           label="Pending question reviews"
           value={data?.pendingQuestionReviews ?? 0}
           icon={ShieldCheck}
+          isLoading={isLoading}
+        />
+      </Link>
+      <Link to="/admin/review">
+        <StatCard
+          label="Archived questions"
+          value={data?.archivedQuestionCount ?? 0}
+          icon={Archive}
+          isLoading={isLoading}
+        />
+      </Link>
+      <Link to="/admin/review">
+        <StatCard
+          label="Deleted questions"
+          value={data?.deletedQuestionCount ?? 0}
+          icon={Trash2}
           isLoading={isLoading}
         />
       </Link>

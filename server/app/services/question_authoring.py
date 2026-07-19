@@ -212,6 +212,97 @@ def create_question_record(
 
 
 # =============================================================================
+# Phase 15, Part 1 -- Question Lifecycle Management: bulk reclassification.
+# =============================================================================
+
+def reclassify_question(
+    question_id: str,
+    *,
+    subject_name: Optional[str] = None,
+    topic_name: Optional[str] = None,
+    company_name: Optional[str] = None,
+) -> List[str]:
+    """Backs "Bulk Subject Update" / "Bulk Topic Update" / "Bulk Company
+    Update" (questions.py's `bulk_update_questions`). Reuses
+    `classification`'s existing get-or-create helpers instead of a second
+    resolution path -- the only genuinely new logic here is rewriting the
+    `question_topics`/`question_companies` join rows a question already has,
+    which nothing in `classify()` (a create-time, insert-only helper) needed
+    to do before now.
+
+    `None` means "leave this field alone" (the caller didn't ask to change
+    it); an empty string for `company_name` means "remove the company tag"
+    (there's no "no company" equivalent for subject/topic -- a topic without
+    a subject can't exist per the `topics` table's own `subject_id not null`
+    constraint, so an explicit `subject_name` must be non-blank).
+
+    Honest caveat, inherited from `create_question_record`/`classify()`'s own
+    shape rather than introduced here: a question's "subject" is only ever
+    reachable through a `question_topics` row pointing at a topic that has a
+    `subject_id` -- there's no column for "subject with no topic" on
+    `questions` itself. So `subject_name` alone (no `topic_name`, and the
+    question has no existing topic) resolves/creates the subject row but
+    leaves the question's own topic link untouched -- the same "subject
+    alone doesn't persist without a topic" behavior `create_question_record`
+    already has, not a new limitation.
+    """
+    admin = get_supabase_admin()
+    fields_changed: List[str] = []
+
+    if subject_name is not None:
+        subject_name = subject_name.strip()
+        if not subject_name:
+            raise QuestionAuthoringError("Subject name can't be blank.")
+        subject_id = classification._get_or_create_subject(subject_name)
+        topic_id: Optional[str] = None
+        if topic_name and topic_name.strip():
+            topic_id = classification._get_or_create_topic(topic_name.strip(), subject_id)
+        admin.table("question_topics").delete().eq("question_id", question_id).execute()
+        if topic_id:
+            admin.table("question_topics").insert(
+                {"question_id": question_id, "topic_id": topic_id}
+            ).execute()
+            fields_changed.append("topic")
+        fields_changed.append("subject")
+    elif topic_name is not None:
+        # Topic-only change -- keep whatever subject the question already
+        # has (a topic can't exist without one, so there must be one).
+        topic_name = topic_name.strip()
+        existing = (
+            admin.table("question_topics")
+            .select("topics(subject_id)")
+            .eq("question_id", question_id)
+            .limit(1)
+            .execute()
+            .data
+        )
+        existing_subject_id = (existing[0].get("topics") or {}).get("subject_id") if existing else None
+        if not existing_subject_id:
+            raise QuestionAuthoringError(
+                "This question has no subject yet -- set subjectName (with topicName) first."
+            )
+        admin.table("question_topics").delete().eq("question_id", question_id).execute()
+        if topic_name:
+            topic_id = classification._get_or_create_topic(topic_name, existing_subject_id)
+            admin.table("question_topics").insert(
+                {"question_id": question_id, "topic_id": topic_id}
+            ).execute()
+        fields_changed.append("topic")
+
+    if company_name is not None:
+        company_name = company_name.strip()
+        admin.table("question_companies").delete().eq("question_id", question_id).execute()
+        if company_name:
+            company_id = classification._get_or_create_company(company_name)
+            admin.table("question_companies").insert(
+                {"question_id": question_id, "company_id": company_id}
+            ).execute()
+        fields_changed.append("company")
+
+    return fields_changed
+
+
+# =============================================================================
 # Smart Bulk Question Parser -- no AI, pure text processing.
 # =============================================================================
 

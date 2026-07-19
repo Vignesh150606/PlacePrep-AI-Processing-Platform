@@ -1,46 +1,242 @@
 # PlacePrep Project State
 
-Last updated: 2026-07-18 (Phase 14, Part 1 -- Mobile Experience & PWA)
+Last updated: 2026-07-19 (Phase 15, Part 1 -- Question Lifecycle Management & Question Bank Admin UX)
 
 ## This pass, in one paragraph
 
-Phase 14, Part 1 of the same two-part brief that shipped Phase 13 (Part 2,
-Question Authoring, first) -- Mobile Experience & PWA. Audited first:
-confirmed via the actual file tree that there was no PWA infrastructure at
-all (no manifest, no service worker, no install prompt, no offline page)
-and that all 25 page components loaded eagerly in one bundle via static
-imports in `router.tsx`. Built the PWA using vite-plugin-pwa's
-`injectManifest` strategy rather than its zero-config `generateSW`,
-because this pass needed two things the declarative config can't express:
-a real `workbox-background-sync` registration, and a genuine two-tier
-offline fallback (cached app shell first, a dedicated static
-`offline.html` only if even that isn't available yet, via
-`workbox-recipes`' `offlineFallback`). Runtime caching is NetworkFirst for
-the app's own `/api/v1/*` GET requests, CacheFirst for images, and
-explicitly NetworkOnly for Supabase (auth/storage) so a stale token is
-never served from cache; background sync is scoped to exactly one write
-endpoint, `POST /quizzes/attempts/{id}/submit`, queuing a quiz submission
-made offline and replaying it once the connection returns -- deliberately
-not extended to every write endpoint (see the detail section's "deliberately
-out of scope" note). Icons were generated from the existing brand mark
-(`favicon.svg`) via cairosvg + Pillow, composited onto a solid background
-at a maskable-safe ~62% scale, rather than commissioning new artwork. On
-the responsive side: a persistent mobile bottom tab bar (Dashboard /
-Questions / Quiz / Bookmarks + a "More" tab that opens the existing nav
-drawer instead of duplicating it); the shared `Dialog` primitive now
-renders as a bottom sheet below `lg` and a centered modal at `lg` and up
--- one change that upgrades every dialog in the app at once, generalizing
-the pattern the quiz palette sheet already used one-off; 25 form-field
-grids across 7 files that were 2- or 3-column with no responsive prefix
-now stack to one column below `sm` (the calendar's 7-column week grid and
-the quiz palette's 5-column button grid were deliberately left alone --
-those column counts are inherent to what they render, not a layout bug);
-route-based code splitting for all 22 non-landing pages via `React.lazy`,
-turning the single eager bundle into a real per-route chunk graph; and a
-36px-to-40px touch-target bump on the shared icon-button size. Production
-hardening (Part 2 -- security review, DB audit, API audit, dead-code
-cleanup) is unchanged from Phase 13's own deferral note and remains
-deferred to its own pass -- see "Not yet built" in `README.md`.
+Phase 15, Part 1 of a twelve-feature "Content Management & Production
+Administration" brief -- Question Lifecycle Management (Feature 1) and
+Question Bank Admin UX (Feature 2), plus the Questions-only slices of
+Audit Logs (Feature 8) and Analytics (Feature 9) those two features
+directly enable. Audited first, as always: read every `questions.py`
+endpoint, the full schema (`questions`, `question_topics`,
+`question_companies`, `admin_audit_logs`), and every downstream consumer
+of `status = 'approved'` (Question Bank, Search, Daily Challenge, the
+admin dashboard's counts) before writing anything, per this project's own
+practice. Two genuinely new schema concepts -- `archived_at`/`archived_by`
+and `deleted_at`/`deleted_by`, both nullable and independent of `status`
+-- plus one new status value, `'archived'` (migration 0016). "Published"
+is deliberately **not** a third: `PATCH /{id}/publish` already moved a
+draft straight to `'approved'` since Phase 13, and every downstream
+consumer already treated `'approved'` as "live" -- adding a second,
+functionally-identical status would have been a duplicate concept, not a
+new one. Delete changed from a real `DELETE` to a soft delete (the brief:
+"Deletion should NEVER immediately remove data") -- a new "Permanent
+Delete" endpoint is the actual irreversible one now. Every lifecycle
+transition (approve/reject/publish/archive/unarchive/restore/soft-delete/
+permanent-delete) lives in exactly one shared helper function, called by
+both the single-item endpoint and the new `POST /questions/bulk-action`
+loop -- not duplicated between them. A second bulk endpoint,
+`PATCH /questions/bulk-update`, covers the brief's five separate "Bulk
+Subject/Topic/Company/Difficulty/Tags Update" asks as one flexible call
+(reusing `classification.py`'s existing get-or-create helpers rather than
+a second resolution path) rather than five near-identical endpoints. The
+frontend's old single-purpose "Review Queue" page (pending-review
+questions only, no bulk anything) became "Manage Questions": six lifecycle
+tabs, a source filter, debounced search, pagination, multi-select with a
+context-aware bulk toolbar, a bulk field-edit dialog, and an "Undo" toast
+action wired to whichever bulk actions have a clean one-call inverse
+(archive/unarchive/delete -- approve/reject/publish/permanent-delete
+deliberately don't get one). Soft-deleted questions are now excluded
+everywhere the brief asked for (`list_questions`, `search.py`,
+`daily_challenge.py`'s two selection queries, the admin dashboard's
+pending-review count) -- audited by grepping every `.table("questions")`
+call in the server, not assumed. A new admin-only analytics endpoint
+(status/source-type breakdown, approval rate, 30-day growth by day,
+moderator activity from `admin_audit_logs`, bulk-import duplicate totals)
+backs two new dashboard stat cards. `admin_audit_logs`' action check
+constraint gained 13 new values (archived/unarchived/restored/
+permanently-deleted plus bulk variants of each, plus bulk-updated); the
+frontend's `AuditAction` union, and the audit log page's three
+`Record<AuditAction, ...>` maps, were extended to match (a genuinely
+pre-existing gap -- the frontend's `AuditAction` union was already
+missing `question-published`, `question-bulk-imported`, and every
+`community-*` action from Phases 12/13 -- was noticed but deliberately
+left alone; fixing it wasn't this phase's brief). Also fixed in passing,
+because it sat directly in the file being rewritten and the very feature
+being built depended on it working: the old admin questions hook sent a
+`sourceType` query parameter, but the backend's FastAPI `Query()` params
+are snake_case (`source_type`) with no camelCase aliasing -- an
+unrecognized query key is silently dropped, not an error, so that source
+filter had likely never actually filtered anything. Verified: Python
+byte-compiles clean, `ruff check` passes with zero errors, a live import
+of `app.main` registers all 114 routes, and a Starlette route-matching
+simulation specifically confirmed `PATCH /questions/bulk-update` resolves
+to the new bulk endpoint and not `PATCH /{question_id}` (both are
+single-path-segment PATCH routes -- a real collision risk this project's
+router had never had before, avoided by registering `bulk-update` first).
+`pnpm install`, `pnpm -r typecheck`, `pnpm -r lint`, and `pnpm -r build`
+(including the PWA service-worker build from Phase 14) all pass clean.
+Everything else in the twelve-feature brief -- the same archive/soft-
+delete/bulk pattern applied to Resources, Interview Experiences,
+Community, and Alumni (each already has its own approve/reject/edit/
+delete-style moderation from earlier phases; this pass didn't touch any
+of them), Company Management (there is no admin CRUD for `companies` at
+all today -- rows only ever come from `classification.py`'s
+get-or-create-on-first-use), and the non-Questions slices of Analytics --
+is Phase 15, Part 2, deliberately deferred the same way Phase 14's Part 2
+was. See "Not yet built" in `README.md` and this file's Phase 15 detail
+section below.
+
+## Phase 15 -- Content Management & Production Administration (Part 1) detail
+
+**The brief.** Twelve features, aimed at giving admins "COMPLETE control
+over all platform content" across Questions, Resources, Interview
+Experiences, Community, Alumni, and Companies, without breaking any of
+the ~30 features already shipped. Part 1 covers exactly Features 1 and 2
+(Question Lifecycle Management, Question Bank Admin UX) plus the slices
+of Features 8 and 9 (Audit Logs, Analytics) those two directly needed.
+
+**Schema (migration 0016).** `questions` gained four nullable columns:
+`archived_at`, `archived_by` (FK -> `profiles.id`, `ON DELETE SET NULL`),
+`deleted_at`, `deleted_by` (same FK shape). Both pairs are independent of
+`status` and of each other -- a draft, an approved, or an archived
+question can each be soft-deleted and later restored back to whichever
+status it actually had; archiving only ever happens from `'approved'`
+(see below), but soft delete doesn't care what status the row is in.
+`questions_status_check` gained exactly one new value, `'archived'`.
+`admin_audit_logs_action_check` gained 13 new values: `question-archived`,
+`question-unarchived`, `question-restored`, `question-permanently-deleted`,
+`question-bulk-updated`, and bulk variants of approve/reject/publish/
+archive/unarchive/restore/delete/permanent-delete. Two new indexes
+(`deleted_at`, `archived_at`) back the near-universal
+`deleted_at is null` filter and its inverse (the admin Deleted tab).
+
+**Why "published" isn't a new status.** `PATCH /questions/{id}/publish`
+already existed (Phase 13) and already moved a draft straight to
+`'approved'`; every downstream consumer -- `list_questions`'s non-admin
+branch, `search.py`, `daily_challenge.py`'s two selection queries, the
+Company Hub's question tab, the admin dashboard's analytics -- already
+treated `'approved'` as "this question is live." Adding a second status
+value that means the exact same thing to every one of those call sites
+would have been a duplicate concept dressed up as a new one. The
+lifecycle diagram in the brief (Draft -> Pending Review -> Approved ->
+Published -> Archived -> Restored -> Deleted) maps onto the actual
+implementation as: Draft -[publish]-> Approved(-="Published") -[archive]->
+Archived -[unarchive]-> Approved; and, orthogonally, any of
+Draft/Approved/Rejected/Archived -[delete]-> soft-deleted
+-[restore]-> (whatever it was) or -[permanent-delete]-> actually gone.
+
+**Shared helpers, not duplicated logic.** Every transition --
+`_approve_or_reject_one`, `_publish_one`, `_archive_one`, `_unarchive_one`,
+`_soft_delete_one`, `_restore_one`, `_permanent_delete_one` -- is a single
+function in `questions.py` that both the matching single-item endpoint
+AND `bulk_question_action`'s loop call. `publish_question` (the existing
+single-item endpoint) was refactored to call `_publish_one` rather than
+keeping its own copy of the duplicate-check-then-update logic once that
+logic needed to also be reachable from the bulk endpoint.
+
+**Two bulk endpoints, not seven.** `POST /questions/bulk-action` (ids +
+one of approve/reject/publish/archive/unarchive/restore/delete/
+permanent-delete) mirrors `resources.py`'s existing `bulk-action` shape
+exactly -- same loop-and-collect-succeeded/failed pattern, same one
+summary audit-log entry per batch, same `{id, error}` shape for partial
+failures. `PATCH /questions/bulk-update` covers the brief's five separate
+"Bulk Subject/Topic/Company/Difficulty/Tags Update" items as one call with
+five independently-optional fields, backed by a new
+`question_authoring.reclassify_question()` helper that reuses
+`classification.py`'s existing get-or-create-subject/topic/company
+functions rather than inventing a second name-resolution path -- the only
+genuinely new logic there is rewriting a question's existing
+`question_topics`/`question_companies` join rows, which `classify()`
+(a create-time, insert-only helper) never needed to do. Caveat carried
+over honestly, not hidden: a question's "subject" is only ever reachable
+through a topic (topics have `subject_id NOT NULL`; there's no "subject
+with no topic" column), so `subject_name` alone with no existing or new
+topic resolves the subject row but doesn't attach it to the question --
+the exact same shape `create_question_record` already had, not a new
+limitation introduced here.
+
+**Registration-order routing hazard (real, not hypothetical).**
+`PATCH /questions/bulk-update` and `PATCH /questions/{question_id}`
+(the pre-existing single-item edit) are both one-path-segment PATCH
+routes. Starlette matches routes in registration order and does not
+prioritize literal segments over path parameters, so if `{question_id}`
+had been registered first, a request to `/questions/bulk-update` would
+have been swallowed as `question_id = "bulk-update"` and routed to the
+wrong handler entirely -- returning a 404 "Question not found" instead of
+ever reaching the bulk endpoint. Placed `bulk-update` (and `bulk-action`,
+though that one had no real collision risk -- there's no single-segment
+POST `/{id}` route) before the single-item PATCH in the file, and
+confirmed with a Starlette route-matching simulation (not just "it
+compiled") that `PATCH /questions/bulk-update` resolves to
+`bulk_update_questions` and `PATCH /questions/{id}` still resolves to
+`update_question`.
+
+**Soft-deleted questions actually disappear everywhere.** Audited by
+grepping every `.table("questions")` call across the server, not assumed
+from reading `list_questions` alone. Fixed sites: `list_questions`'s
+shared filter builder (new `deleted` param, admin-only, default
+`is_("deleted_at", "null")`); `search.py`'s question search (unconditional
+`is_("deleted_at", "null")`, admin or not -- search isn't the lifecycle
+management surface, so it never shows deleted rows even to an admin);
+`daily_challenge.py`'s weak-topic and filler selection queries (both
+gained the filter); the admin dashboard's `pending_question_reviews`
+count. `quizzes.py` needed no change -- it only ever resolves question
+data from ids the frontend already fetched via `list_questions`, it
+doesn't re-query the `questions` table by status itself.
+
+**Frontend: "Manage Questions."** Replaces the old admin-review-page.tsx
+(pending-review only, no multi-select, no bulk anything) in place --
+same route (`/admin/review`), same exported component name
+(`AdminReviewPage`, so `router.tsx`'s lazy import didn't need touching),
+new content. Six tabs (Pending review / Drafts / Approved / Archived /
+Rejected / Deleted) map onto `status` + the new `deleted` query param;
+the existing source-type filter row, edit dialog, and single-item
+approve/reject flow carried over unchanged. New: a debounced search box
+(300ms, same local pattern `admin-dashboard-page.tsx`'s `UsersTable`
+already uses -- no shared debounce hook exists in this codebase yet, so
+this stays a second local copy rather than introducing one for two
+callers); pagination (same `ChevronLeft`/`ChevronRight` Prev/Next pattern
+as that same table); a context-aware bulk toolbar (only the actions valid
+for the active tab render -- Approve/Reject only on Pending Review,
+Publish only on Drafts, Archive only on Approved, Unarchive/Restore/
+Permanent-Delete only on Archived/Deleted); a "Bulk edit" dialog for the
+five field updates; and an "Undo" action button on the result toast for
+archive/unarchive/delete (the three bulk actions with a clean one-call
+inverse -- `QuestionBulkActionResult.undoAction` is `null` for the rest).
+Confirmation for destructive bulk actions (delete, permanent-delete) uses
+`window.confirm`, matching this codebase's existing convention
+(`admin-resources-page.tsx`'s single-delete flow) rather than introducing
+a new dialog-based confirmation pattern. Publishing a draft from the new
+page reuses `use-question-authoring.ts`'s existing `usePublishDraftQuestion`
+hook rather than adding a second hook wrapping the same
+`PATCH /{id}/publish` endpoint -- the "Draft Management" section of
+`admin-question-builder-page.tsx` (an admin's own drafts, personal
+authoring workflow) and the new page's Drafts tab (every admin's drafts,
+platform-wide oversight) are genuinely different surfaces over the same
+data, not duplicate functionality.
+
+**Analytics (Feature 9, Questions-only).** `GET /questions/analytics/
+summary`: counts by status and by source type (both `count="exact"`
+round trips per value, not a full-table fetch), approval rate
+(approved / (approved + rejected)), a 30-day daily creation count
+(bounded fetch + Python-side `Counter`, not a full scan), moderator
+activity (`admin_audit_logs` rows targeting questions in the last 30
+days, grouped by admin, names joined from `profiles`), and a bulk-import
+duplicate total (summed from `question_import_batches.total_duplicate`
+-- the one place duplicate counts are actually persisted; duplicates
+blocked at single-question create time return an error and are never
+written anywhere, so this figure is honestly scoped to bulk-import only,
+not "all duplicates ever blocked"). Backs two new dashboard stat cards
+(archived/deleted question counts); the existing summary endpoint's
+`pending_question_reviews` count also picked up the `deleted_at is null`
+filter it was missing.
+
+**What Part 1 deliberately did NOT touch** (Phase 15, Part 2): Resources,
+Interview Experiences, Community, and Alumni all still only have the
+approve/reject/edit/delete-style moderation they already had from Phases
+10-12 -- no archive, no soft delete, no bulk beyond what `resources.py`
+already had going into this phase. Company Management (create/edit/
+archive/restore/merge) doesn't exist at all yet -- `companies` rows are
+only ever created via `classification.py`'s get-or-create-on-first-use,
+there is no admin-facing CRUD surface for them. The non-Questions slices
+of Feature 9's analytics (company/resource/alumni/community-wide) are
+also deferred. Split out the same way Phase 14's Part 2 (production
+hardening) was split from Part 1 -- a twelve-feature brief attempted in
+full, at reduced depth per feature, would have violated the brief's own
+"no partially implemented features" bar; a smaller, fully-verified slice
+doesn't.
 
 ## Phase 14 -- Mobile Experience & PWA (Part 1) detail
 

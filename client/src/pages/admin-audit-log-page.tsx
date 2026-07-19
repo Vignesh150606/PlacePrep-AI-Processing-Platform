@@ -40,6 +40,20 @@ const ACTIONS: AuditAction[] = [
   "alumni-verification-removed",
   "alumni-deleted",
   "alumni-manual-created",
+  // Phase 15, Part 1 -- Question Lifecycle Management.
+  "question-archived",
+  "question-unarchived",
+  "question-restored",
+  "question-permanently-deleted",
+  "question-bulk-updated",
+  "question-bulk-approved",
+  "question-bulk-rejected",
+  "question-bulk-published",
+  "question-bulk-archived",
+  "question-bulk-unarchived",
+  "question-bulk-restored",
+  "question-bulk-deleted",
+  "question-bulk-permanently-deleted",
 ];
 
 const TARGET_TYPES: AuditTargetType[] = ["pdf", "question", "interview-experience", "user", "resource", "alumni"];
@@ -71,6 +85,20 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "alumni-verification-removed": "Removed an alumnus's verification",
   "alumni-deleted": "Deleted an alumni profile",
   "alumni-manual-created": "Manually verified an alumnus",
+  // Phase 15, Part 1 -- Question Lifecycle Management.
+  "question-archived": "Archived a question",
+  "question-unarchived": "Unarchived a question",
+  "question-restored": "Restored a deleted question",
+  "question-permanently-deleted": "Permanently deleted a question",
+  "question-bulk-updated": "Bulk-updated questions",
+  "question-bulk-approved": "Bulk-approved questions",
+  "question-bulk-rejected": "Bulk-rejected questions",
+  "question-bulk-published": "Bulk-published questions",
+  "question-bulk-archived": "Bulk-archived questions",
+  "question-bulk-unarchived": "Bulk-unarchived questions",
+  "question-bulk-restored": "Bulk-restored questions",
+  "question-bulk-deleted": "Bulk-deleted questions",
+  "question-bulk-permanently-deleted": "Bulk-permanently-deleted questions",
 };
 
 const ACTION_BADGE_VARIANT: Record<AuditAction, "correct" | "incorrect" | "accent" | "warning" | "neutral"> = {
@@ -100,6 +128,20 @@ const ACTION_BADGE_VARIANT: Record<AuditAction, "correct" | "incorrect" | "accen
   "alumni-verification-removed": "warning",
   "alumni-deleted": "incorrect",
   "alumni-manual-created": "correct",
+  // Phase 15, Part 1 -- Question Lifecycle Management.
+  "question-archived": "warning",
+  "question-unarchived": "accent",
+  "question-restored": "accent",
+  "question-permanently-deleted": "incorrect",
+  "question-bulk-updated": "accent",
+  "question-bulk-approved": "correct",
+  "question-bulk-rejected": "incorrect",
+  "question-bulk-published": "correct",
+  "question-bulk-archived": "warning",
+  "question-bulk-unarchived": "accent",
+  "question-bulk-restored": "accent",
+  "question-bulk-deleted": "incorrect",
+  "question-bulk-permanently-deleted": "incorrect",
 };
 
 const TARGET_LINK: Record<AuditTargetType, string | undefined> = {
