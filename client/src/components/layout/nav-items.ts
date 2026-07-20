@@ -77,7 +77,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Manage Questions", href: "/admin/review", icon: ShieldCheck, adminOnly: true },
       { label: "Question Builder", href: "/admin/questions/new", icon: PenSquare, adminOnly: true },
       { label: "Bulk Import Questions", href: "/admin/questions/bulk-import", icon: UploadCloud, adminOnly: true },
-      { label: "Pending Resources", href: "/admin/resources", icon: Library, adminOnly: true },
+      { label: "Manage Resources", href: "/admin/resources", icon: Library, adminOnly: true },
       { label: "Pending Alumni Verification", href: "/admin/alumni", icon: GraduationCap, adminOnly: true },
       { label: "Community Moderation", href: "/admin/community", icon: Flag, adminOnly: true },
       { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText, adminOnly: true },
