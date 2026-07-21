@@ -1,8 +1,9 @@
 import * as React from "react";
-import { GraduationCap, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { useAuth } from "@/hooks/use-auth";
 
 function GoogleLogo() {
@@ -46,9 +47,7 @@ export function LoginPage() {
     <div className="flex min-h-dvh items-center justify-center bg-background p-6">
       <div className="flex w-full max-w-sm flex-col gap-6 animate-fade-up">
         <div className="flex flex-col items-center gap-2 text-center">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-accent-600 text-white">
-            <GraduationCap className="size-5" />
-          </div>
+          <Logo className="size-14" />
           <h1 className="text-lg font-semibold tracking-tight text-foreground">PlacePrep</h1>
           <p className="text-sm text-muted-foreground">
             Sign in to continue your placement prep.

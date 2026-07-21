@@ -22,6 +22,7 @@ from app.api.v1.endpoints import (
     quizzes,
     resources,
     search,
+    settings,
     subjects,
     topics,
 )
@@ -30,6 +31,7 @@ api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Admin"])
 api_router.include_router(profiles.router, prefix="/profiles", tags=["Profiles"])
+api_router.include_router(settings.router, prefix="/settings", tags=["Settings"])
 api_router.include_router(pdfs.router, prefix="/pdfs", tags=["PDFs"])
 api_router.include_router(questions.router, prefix="/questions", tags=["Questions"])
 api_router.include_router(companies.router, prefix="/companies", tags=["Companies"])

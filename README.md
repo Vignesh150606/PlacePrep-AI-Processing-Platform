@@ -140,6 +140,19 @@ Supabase project's SQL editor: `0001` through `0016`. Each is idempotent
   (create/edit/archive/merge -- there is no admin company CRUD at all
   today) and the rest of the brief's analytics/audit-export work, remains
   deferred; see "Not yet built" below.
+- Settings (Phase 16) -- Account (name/avatar/college/department/year --
+  the first UI in the app to edit your own profile), Security (password
+  change, Google account connect/disconnect, sign out of other devices),
+  Notifications (two real preference toggles -- content/discovery updates
+  and community replies; everything else, like your own submission
+  outcomes, always notifies you), Appearance (theme plus reduced-motion
+  and font-size accessibility controls), Privacy & Data (default interview
+  anonymity, alumni directory opt-out, one-click data export, and account
+  deletion with a typed confirmation), and -- admins only -- quick links
+  into the existing Admin Portal. The real PlacePrep logo replaced the
+  generic icon placeholder across favicons/PWA icons/nav/login, and a
+  boot-gate screen now waits for the Render backend to wake from a cold
+  start instead of every API call failing at once on first load.
 - Global search (⌘K command palette) and Daily Challenge backend (with
   streak tracking)
 - Notifications (dropdown + standalone page), Dashboard, Company pages,

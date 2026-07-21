@@ -10,10 +10,12 @@ import "@fontsource-variable/geist-mono/index.css";
 import "./index.css";
 import { router } from "./router";
 import { ThemeProvider } from "./providers/theme-provider";
+import { AccessibilityProvider } from "./providers/accessibility-provider";
 import { QueryProvider } from "./providers/query-provider";
 import { AuthProvider } from "./providers/auth-provider";
 import { useAuth } from "./hooks/use-auth";
 import { AppErrorBoundary } from "./components/layout/error-boundary";
+import { BootGate } from "./components/boot-gate";
 import { usePwaUpdate } from "./hooks/use-pwa-update";
 
 function RouterShell() {
@@ -43,11 +45,17 @@ createRoot(rootElement).render(
   <StrictMode>
     <AppErrorBoundary>
       <ThemeProvider>
-        <QueryProvider>
-          <AuthProvider>
-            <RouterShell />
-          </AuthProvider>
-        </QueryProvider>
+        <AccessibilityProvider>
+          <QueryProvider>
+            {/* NEW (Phase 16): waits for a real backend response before the
+                auth check / router even mount -- see boot-gate.tsx. */}
+            <BootGate>
+              <AuthProvider>
+                <RouterShell />
+              </AuthProvider>
+            </BootGate>
+          </QueryProvider>
+        </AccessibilityProvider>
       </ThemeProvider>
     </AppErrorBoundary>
   </StrictMode>,

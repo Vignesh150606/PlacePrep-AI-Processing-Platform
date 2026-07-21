@@ -364,7 +364,16 @@ async def list_alumni(
             else admin_client.table("alumni_profiles").select(select)
         )
         if not admin:
-            q = q.or_(f"verification_status.eq.verified,profile_id.eq.{current_user.id}")
+            # NEW (Phase 16): a verified alumnus can opt out of the public
+            # directory (`directory_visible`, migration 0018) without
+            # losing their own ability to see their row -- same "you can
+            # always see your own" shape as every other status filter in
+            # this query, just nested inside the "verified" branch instead
+            # of replacing it.
+            q = q.or_(
+                f"and(verification_status.eq.verified,directory_visible.eq.true),"
+                f"profile_id.eq.{current_user.id}"
+            )
         elif status:
             q = q.eq("verification_status", status)
         if company_id:

@@ -97,8 +97,8 @@ const AdminReviewPage = React.lazy(() =>
 const NotificationsPage = React.lazy(() =>
   import("@/pages/notifications-page").then((m) => ({ default: m.NotificationsPage })),
 );
-const ComingSoonPage = React.lazy(() =>
-  import("@/pages/coming-soon").then((m) => ({ default: m.ComingSoonPage })),
+const SettingsPage = React.lazy(() =>
+  import("@/pages/settings-page").then((m) => ({ default: m.SettingsPage })),
 );
 
 export interface RouterContext {
@@ -343,7 +343,7 @@ const notificationsRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/settings",
-  component: () => <ComingSoonPage title="Settings" />,
+  component: SettingsPage,
 });
 
 const notFoundRoute = createRoute({

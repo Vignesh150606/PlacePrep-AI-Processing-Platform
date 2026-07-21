@@ -172,3 +172,26 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* NEW (Phase 16): manual "reduced motion" from Settings > Appearance, for
+   people who want animations off regardless of their OS-level preference
+   (the media query above only fires when the OS already has it set).
+   Same effect, just triggered by a class the accessibility provider
+   toggles instead of a media query. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* NEW (Phase 16): Settings > Appearance font size. Scales the rem root so
+   every existing Tailwind text-* utility (all rem-based) scales with it,
+   instead of a second parallel sizing system. */
+html[data-font-size="sm"] {
+  font-size: 93.75%; /* 15px base */
+}
+html[data-font-size="lg"] {
+  font-size: 112.5%; /* 18px base */
+}

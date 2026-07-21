@@ -34,7 +34,7 @@ export default defineConfig({
       // in-app toast instead of a bare `confirm()`; the auto-injected
       // register script would double-register the same worker.
       injectRegister: null,
-      includeAssets: ["favicon.svg", "apple-touch-icon.png", "offline.html"],
+      includeAssets: ["favicon-32.png", "favicon-16.png", "apple-touch-icon.png", "offline.html"],
       manifest: {
         name: "PlacePrep — Placement Intelligence Platform",
         short_name: "PlacePrep",

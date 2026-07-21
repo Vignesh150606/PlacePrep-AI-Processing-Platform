@@ -35,6 +35,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   }, []);
 
+  // NEW (Phase 16) --------------------------------------------------------
+  const updatePassword = React.useCallback(async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  }, []);
+
+  const signOutOtherSessions = React.useCallback(async () => {
+    const { error } = await supabase.auth.signOut({ scope: "others" });
+    if (error) throw error;
+  }, []);
+
+  const getIdentities = React.useCallback(async () => {
+    const { data, error } = await supabase.auth.getUserIdentities();
+    if (error) throw error;
+    return data.identities;
+  }, []);
+
+  const linkGoogleIdentity = React.useCallback(async () => {
+    const { error } = await supabase.auth.linkIdentity({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) throw error;
+  }, []);
+
+  const unlinkIdentity = React.useCallback(async (identity: Parameters<typeof supabase.auth.unlinkIdentity>[0]) => {
+    const { error } = await supabase.auth.unlinkIdentity(identity);
+    if (error) throw error;
+  }, []);
+  // ------------------------------------------------------------------------
+
   const value = React.useMemo(
     () => ({
       session,
@@ -42,8 +73,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       signInWithGoogle,
       signOut,
+      updatePassword,
+      signOutOtherSessions,
+      getIdentities,
+      linkGoogleIdentity,
+      unlinkIdentity,
     }),
-    [session, isLoading, signInWithGoogle, signOut],
+    [
+      session,
+      isLoading,
+      signInWithGoogle,
+      signOut,
+      updatePassword,
+      signOutOtherSessions,
+      getIdentities,
+      linkGoogleIdentity,
+      unlinkIdentity,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

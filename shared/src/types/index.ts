@@ -20,3 +20,4 @@ export * from "./search";
 export * from "./resource";
 export * from "./alumni";
 export * from "./community";
+export * from "./settings";

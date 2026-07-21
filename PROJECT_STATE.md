@@ -1,8 +1,181 @@
 # PlacePrep Project State
 
-Last updated: 2026-07-19 (Phase 15, Part 2, Slice A -- Resource Lifecycle Management + Shared Lifecycle Framework)
+Last updated: 2026-07-21 (Phase 16 -- Production Completion Audit: Settings Module)
 
 ## This pass, in one paragraph
+
+Phase 16 arrived as a "Production Completion Audit" brief demanding zero
+placeholders anywhere in the app, a fully built-out Settings module, and a
+full verification pass. Audited first, per this project's own established
+practice, rather than taking the brief's checklist at face value: grepped
+the entire client and server for "TODO"/"FIXME"/"coming soon"/"mock
+data"/"not implemented" before touching anything. Found exactly one real
+placeholder -- `/settings` was still the literal `ComingSoonPage` stub
+from before this project's phases began -- plus stale "remaining work"
+notes at the tail of this very file left over from a much earlier phase.
+Everything else the brief worried about (dead nav, disabled buttons,
+hardcoded analytics) wasn't real; analytics already reads from live hooks,
+and no other route resolves to a stub. Scoped this pass to the Settings
+module only, deferring Company Management CRUD+merge and the remaining
+lifecycle work (Interview Experiences/Community/Alumni, per Phase 15
+Part 2's own deferral note) to a further pass -- same "no partial
+implementations spread thin" reasoning this project has applied at every
+split-brief decision so far. Migration 0018 added exactly two genuinely
+new pieces of server state (`profiles.notification_prefs`,
+`profiles.default_anonymous_interview`, `alumni_profiles.directory_visible`)
+-- everything else Settings needed either already existed (profile fields
+via the existing `PATCH /profiles/me`, which had no client hook or form
+until now) or is a Supabase Auth action with no PlacePrep-owned row to add
+a column to (password change, Google account link/unlink, "sign out of
+other devices"). New `app/api/v1/endpoints/settings.py` covers
+notification/privacy preferences plus the two irreversible account
+actions (data export, delete account); `notify()`/`notify_admins()` now
+gate exactly the two discretionary notification categories (everything
+else -- approvals, rejections, moderation, suspensions -- still always
+sends, since muting those would hide things people need to see, not
+reduce noise); `alumni.py`'s directory query respects the new
+`directory_visible` opt-out without affecting the alumnus's own visibility
+of their own row. Frontend: a real `settings-page.tsx` (Account/Security/
+Notifications/Appearance/Privacy & Data, plus an Admin tab that's just
+quick links into the existing Admin Portal -- no new admin config system),
+a new `AccessibilityProvider` (reduced motion, font size) following
+`ThemeProvider`'s exact client-only/localStorage pattern, and a `Switch`
+primitive (new `@radix-ui/react-switch` dependency -- the only new
+frontend dependency this pass added). Two small pieces of unrelated, but
+requested, work rode along: the real PlacePrep logo (cropped from supplied
+artwork into every favicon/PWA-icon size plus the sidebar/mobile-nav/login
+brand mark, replacing the generic `GraduationCap`-in-a-box placeholder),
+and a `BootGate` component that polls `/health` with backoff before
+mounting the app, so a cold Render free-tier instance shows one honest
+"waking up the server" message instead of every API call failing at once.
+Also fixed: the repo shipped with no root `.gitignore` at all, which meant
+`oxlint` had no way to know to skip `node_modules` -- added one (this is
+also why a fresh `pnpm install` before this pass would have made `pnpm
+lint` unusable for anyone, not just this session). Verified: `pnpm
+install`, `pnpm -r typecheck` (client + shared), `pnpm -r lint` (zero
+errors, the one warning is the pre-existing untouched `main.tsx`
+fast-refresh warning), `pnpm -r build` (including the PWA service-worker
+build, `settings-page` correctly code-split), `ruff check` (one real hit
+in the new `settings.py` -- an unused `pydantic.Field` import -- fixed),
+and a live import of `app.main` confirming all 124 routes register,
+including the four new `/settings/*` routes. Company Management CRUD+
+merge, and the lifecycle/moderation extension to Interview Experiences/
+Community/Alumni, remain deferred -- see "Not yet built" in `README.md`.
+
+## Phase 16 -- Production Completion Audit: Settings Module detail
+
+**The brief, and what was actually true.** The brief was a generic
+"nothing should feel unfinished anywhere" audit covering the whole app.
+Rather than trust that framing, grepped for every pattern it named
+(placeholder/mock/dummy/TODO/FIXME/coming-soon/not-implemented) across
+`client/src`, `server/app`, and `shared/src` first. The only literal hit
+was `router.tsx`'s `/settings` route, still rendering
+`<ComingSoonPage title="Settings" />` -- everything else flagged by the
+brief (hardcoded analytics, dead nav, disabled buttons) checked out as
+already real. Scoped the pass to Settings alone; Company Management and
+the Interview Experience/Community/Alumni lifecycle extension the brief
+also mentioned were already known-deferred items from Phase 15 Part 2 and
+would have meant three more full feature builds at reduced depth in the
+same pass.
+
+**Schema (migration 0018).** `profiles.notification_prefs` (jsonb, default
+`{"contentUpdates": true, "communityActivity": true}`),
+`profiles.default_anonymous_interview` (boolean, default false),
+`alumni_profiles.directory_visible` (boolean, default true -- additive,
+matches today's actual behavior for existing rows). No RLS changes:
+`profiles_update_own` (migration 0002) and
+`alumni_profiles_update_own_or_admin` (migration 0013) already cover the
+new columns on the user's own row, and the real enforcement is
+server-side via the service-role client, same as everywhere else in this
+API.
+
+**Why so little new state.** Audited what a "Settings" page needs before
+adding anything: profile fields (name/avatar/college/department/year) are
+the existing `PATCH /profiles/me`; theme and the two new accessibility
+controls are client-only/localStorage, the same shape `theme-provider.tsx`
+already established; password change, Google identity link/unlink, and
+"sign out of other devices" are all `supabase.auth.*` calls with no
+PlacePrep row involved; data export and delete-account are one-shot
+actions against tables that already exist. The two preference columns
+above are the only settings that change server *behavior*, which is the
+only reason they're not client-only too.
+
+**`settings.py`.** `GET/PATCH /settings/me` (notification prefs, default
+interview anonymity, alumni directory visibility -- the last one 400s if
+the caller has no `alumni_profiles` row). `GET /settings/export` gathers
+one query per table the user owns data in (quiz_attempts, bookmarks,
+wrong_answer_marks, questions, resources, interview_experiences,
+community_posts, community_comments) into one JSON payload -- no
+background job, the data volume a single student generates is small
+enough to assemble synchronously. `DELETE /settings/account` calls
+`auth.admin.delete_user`, which cascades through every `references
+public.profiles (id) on delete cascade` FK already in the schema; admins
+are blocked from self-deleting, mirroring `admin.py`'s existing
+"can't change your own role" guard on `update_user_role` rather than
+attempting a "last admin" count check.
+
+**Notification gating.** `_GATED_CATEGORIES` in
+`services/notifications.py` maps exactly four notification types
+(`new-company`, `new-resource`, `calendar-update` -> `contentUpdates`;
+`community-reply` -> `communityActivity`) to the two preference toggles;
+every other type -- extraction status, question/resource/alumni review
+outcomes, moderation actions, suspensions -- is unconditional, since those
+are direct outcomes of the recipient's own action or account status, not
+discretionary noise. The app has no email/SMS delivery at all (grepped for
+resend/sendgrid/smtp -- none), so this only ever gates the in-app feed.
+
+**Frontend.** `settings-page.tsx`: Account (the first UI in the app to
+edit your own profile -- `useUpdateProfile` added to `use-profile.ts`),
+Security (password change + `ConnectedAccountsCard` showing linked
+identities + "sign out of other devices"), Notifications (two switches),
+Appearance (theme, reusing `useTheme`, plus the new reduced-motion/
+font-size controls), Privacy & Data (default interview anonymity, alumni
+directory visibility when applicable, data export download, and a
+danger-zone delete-account dialog requiring the caller to type "DELETE"),
+and -- admins only -- a tab of quick links into the existing Admin Portal
+pages, not a new admin config system. `AccessibilityContext`/
+`AccessibilityProvider`/`useAccessibility` mirror `theme-context.ts`/
+`theme-provider.tsx`/`use-theme.ts` exactly: a `reduce-motion` class and a
+`data-font-size` attribute toggled on `<html>`, with matching CSS added to
+`index.css`. `AuthContext` gained `updatePassword`/`signOutOtherSessions`/
+`getIdentities`/`linkGoogleIdentity`/`unlinkIdentity` -- kept in the one
+place that already owned every other `supabase.auth.*` call rather than
+importing the client directly into a new file. `interview-experiences-
+page.tsx`'s submission form now seeds its "post anonymously" checkbox from
+`useSettings().defaultAnonymousInterview` instead of a hardcoded `false`.
+
+**Logo.** Cropped the icon mark (graduation cap + bar chart inside the
+stylized "P") out of the supplied artwork -- separately from the
+"PlacePrep" wordmark baked into the same image, which would have been
+redundant next to the text heading every call site already renders beside
+it. Generated favicon-16/32, apple-touch-icon (180), and PWA icon-192/512,
+padded for maskable-icon safety; replaced the `GraduationCap`-in-a-box
+placeholder in `sidebar.tsx`, `mobile-nav.tsx`, and `login-page.tsx` with
+a new `components/ui/logo.tsx`.
+
+**Boot gate.** The deployed backend runs on Render's free tier, which
+idles down and takes 30-60+ seconds to cold-start. `components/boot-
+gate.tsx` polls `/health` with capped exponential backoff (up to ~2
+minutes) before mounting `AuthProvider`/`RouterShell`, showing an honest
+"waking up the server" message with elapsed time instead of every API
+call failing at once on a cold load; skips itself after the first success
+in a tab session via `sessionStorage` so it never re-appears on
+client-side route changes.
+
+**Verification.** `pnpm install`, `pnpm -r typecheck` (client + shared,
+both clean), `pnpm -r lint` (zero errors -- discovered and fixed a missing
+root `.gitignore` along the way, without which oxlint was scanning
+`node_modules` wholesale), `pnpm -r build` (clean, `settings-page`
+code-split correctly, PWA precache manifest generated), `ruff check`
+(caught and fixed one unused import in the new `settings.py`), and a live
+`python -c "from app.main import app"` confirming all 124 routes register
+including the four new `/settings/*` ones. `SettingsResponse.model_dump
+(by_alias=True)` spot-checked to confirm the camelCase contract the
+frontend's `Settings` type expects. No live Supabase credentials in this
+environment, so migration 0018 needs to be applied by hand (Supabase SQL
+editor or CLI), same as every migration before it.
+
+## Phase 15 -- Global Content Management & Production Administration (Part 2, Slice A) history
 
 Phase 15, Part 2, Slice A -- of the broader "Global Content Management &
 Production Administration" brief (Resources, Interview Experiences,
@@ -1798,31 +1971,27 @@ checked, not blindly patched:
 - [ ] 23. Testing -- still no checked-in automated suite (see above)
 - [ ] 24. Docker / Final Review -- unchanged
 
-## Remaining work for Phase 7
+## Longstanding gaps (carried forward, still true as of Phase 16)
 
-1. **Run migration 0006 against the real Supabase project**, alongside
-   confirming 0001-0005 are already applied, before deploying this
-   version of the backend.
-2. **Smoke-test Admin Merge against real conflicting data** on a staging
-   project (a user who's bookmarked/wrong-answered both the canonical and
-   duplicate question) -- the logic is real and its constraint
-   dependencies are confirmed, but it hasn't seen live conflict data yet.
-3. **Frontend switch-over** for the two SSE/trend endpoints, and loosening
-   the upload dropzone's `accept` attribute to actually let users pick an
-   image -- all three are one small, well-scoped frontend change each,
-   listed in `FUNCTIONAL_RECOMMENDATIONS.md`.
-4. **Interview Experiences backend**, **Community**, **Placement
-   Calendar** -- unchanged scope from every prior pass.
-5. **A real automated test suite** -- still the most consequential
-   remaining gap; the scoring-recomputation logic in `quizzes.py` and the
-   new merge logic in `question_merge.py` are exactly the kind of code a
-   regression could silently break without one.
-6. **Rate limiter load testing** and, if deploying more than one backend
-   instance, switching `RATE_LIMIT_STORAGE_URI` to Redis.
-7. **Wire the command palette to `GET /search`** instead of client-cached
-   React Query data (see `MERGE_NOTES.md` Part 3) -- fine at current data
-   volume, but the palette can't find anything outside whatever page of
-   questions/PDFs is already loaded.
+This section used to be titled "Remaining work for Phase 7" and listed
+seven items; five of them (migration 0006, Admin Merge smoke-testing, the
+SSE/upload-dropzone frontend switch-over, Interview Experiences/Community/
+Placement Calendar, and wiring the command palette to `GET /search`) have
+since shipped in later phases and were removed from this list rather than
+left here to rot, per this project's own "no future-phase references that
+have been completed" rule. Two items from that original list are still
+genuinely unresolved:
+
+1. **A real automated test suite.** Individual passes have added targeted
+   unit tests against a mocked Supabase client (e.g. Phase 15 Part 2's
+   `lifecycle.py` tests), but there's still no checked-in, comprehensive
+   suite. Still the most consequential remaining gap -- the
+   scoring-recomputation logic in `quizzes.py`, the merge logic in
+   `question_merge.py`, and now the lifecycle/settings logic are exactly
+   the kind of code a regression could silently break without one.
+2. **Rate limiter load testing**, and switching `RATE_LIMIT_STORAGE_URI`
+   to Redis if this is ever deployed as more than one backend instance
+   (see `core/config.py`'s own note on this).
 
 ## Security note (carried forward -- action still needed)
 
@@ -1830,3 +1999,4 @@ Unchanged from previous entries: confirm the previously-flagged exposed
 Supabase secret/service-role key has actually been rotated (Supabase
 dashboard -> Project Settings -> API). This pass has no way to verify
 that from here.
+

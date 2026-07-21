@@ -35,6 +35,7 @@ import { ROUND_TYPE_LABELS, OUTCOME_VARIANT } from "@/lib/interview-labels";
 import { useIsAdmin } from "@/hooks/use-profile";
 import { useProfile } from "@/hooks/use-profile";
 import { useCompanies } from "@/hooks/use-companies";
+import { useSettings } from "@/hooks/use-settings";
 import { useBookmarks } from "@/hooks/use-bookmarks";
 import {
   useCreateExperience,
@@ -88,10 +89,15 @@ const submissionSchema = z.object({
 
 type SubmissionFormValues = z.infer<typeof submissionSchema>;
 
-function emptyForm(defaults: { college?: string | null; department?: string | null; graduationYear?: number | null }): SubmissionFormValues {
+function emptyForm(defaults: {
+  college?: string | null;
+  department?: string | null;
+  graduationYear?: number | null;
+  isAnonymous?: boolean;
+}): SubmissionFormValues {
   return {
     companyId: "",
-    isAnonymous: false,
+    isAnonymous: defaults.isAnonymous ?? false,
     role: "",
     employmentType: "full-time",
     packageLpa: null,
@@ -148,6 +154,7 @@ export function SubmissionDialog({
 }) {
   const { data: companyData } = useCompanies();
   const { data: profile } = useProfile();
+  const { data: settings } = useSettings();
   const companies = companyData?.items ?? [];
   const create = useCreateExperience();
   const update = useUpdateExperience();
@@ -157,7 +164,12 @@ export function SubmissionDialog({
     resolver: zodResolver(submissionSchema),
     values: editing
       ? toFormValues(editing)
-      : emptyForm({ college: profile?.college, department: profile?.department, graduationYear: profile?.year }),
+      : emptyForm({
+          college: profile?.college,
+          department: profile?.department,
+          graduationYear: profile?.year,
+          isAnonymous: settings?.defaultAnonymousInterview,
+        }),
   });
   const { fields, append, remove } = useFieldArray({ control, name: "rounds" });
 

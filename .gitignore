@@ -1,29 +1,33 @@
-.DS_Store
-Thumbs.db
-
+# Dependencies
 node_modules/
+.pnpm-store/
+
+# Build output
 dist/
+dist-ssr/
 build/
-.turbo/
 .vite/
 
-.env
-.env.*
-!.env.example
-
+# Python
 __pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+*.pyc
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
 
-coverage/
-htmlcov/
+# Env files -- examples are checked in, real ones never are
+.env
+.env.local
+.env.*.local
+!.env.example
 
+# Editor / OS
+.DS_Store
 *.log
-logs/
-
-.idea/
 .vscode/
+.idea/
+
+# Misc
+*.tsbuildinfo
+coverage/

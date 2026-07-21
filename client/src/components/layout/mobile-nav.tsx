@@ -1,9 +1,10 @@
 import * as React from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { GraduationCap, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { NAV_SECTIONS } from "./nav-items";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { useIsAdmin } from "@/hooks/use-profile";
 import { useDialogA11y } from "@/hooks/use-dialog-a11y";
 import { useMobileNavContext } from "@/hooks/use-mobile-nav-context";
@@ -63,9 +64,7 @@ export function MobileNav() {
           >
             <div className="flex h-14 items-center justify-between border-b border-border px-4">
               <div className="flex items-center gap-2">
-                <div className="flex size-7 items-center justify-center rounded-md bg-accent-600 text-white">
-                  <GraduationCap className="size-4" />
-                </div>
+                <Logo />
                 <span className="text-sm font-semibold text-foreground">PlacePrep</span>
               </div>
               <Button

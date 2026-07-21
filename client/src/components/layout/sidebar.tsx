@@ -1,8 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { GraduationCap } from "lucide-react";
 import { NAV_SECTIONS } from "./nav-items";
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/use-profile";
+import { Logo } from "@/components/ui/logo";
 
 export function Sidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -16,9 +16,7 @@ export function Sidebar() {
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface lg:flex">
       <div className="flex h-14 items-center gap-2 border-b border-border px-5">
-        <div className="flex size-7 items-center justify-center rounded-md bg-accent-600 text-white">
-          <GraduationCap className="size-4" />
-        </div>
+        <Logo />
         <span className="text-sm font-semibold tracking-tight text-foreground">PlacePrep</span>
       </div>
 
