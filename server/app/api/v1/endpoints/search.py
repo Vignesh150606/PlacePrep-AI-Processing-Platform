@@ -5,10 +5,11 @@ nothing behind it).
 
 Searches across the three entity types a student would plausibly be
 looking for from the top nav: questions, companies, and uploaded PDFs.
-Interview Experiences are deliberately excluded -- there's still no real
-backend for them (sample data only, per every prior PROJECT_STATE.md
-pass), and surfacing search results for data that isn't real would be
-worse than not searching it at all.
+Interview Experiences are deliberately excluded -- not because there's no
+backend for them (that shipped in Phase 9), but as a scope decision: this
+endpoint hasn't been extended to a fourth entity type, matching this
+project's pattern of shipping search's own scope deliberately rather than
+growing it silently alongside unrelated passes.
 
 Visibility rules mirror the endpoints these results come from, not a new
 policy invented here: non-admins only see `approved` questions (same rule
@@ -30,6 +31,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import CurrentUser, get_current_user, is_admin
 from app.core.exceptions import AppException
+from app.core.query_safety import safe_filter_value
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
@@ -108,7 +110,7 @@ async def search(
     pdf_rows = (
         admin_client.table("pdf_resources")
         .select("id, title, file_name, processing_status")
-        .or_(f"file_name.ilike.{like_pattern},title.ilike.{like_pattern}")
+        .or_(f"file_name.ilike.{safe_filter_value(like_pattern)},title.ilike.{safe_filter_value(like_pattern)}")
         .limit(_RESULTS_PER_TYPE)
         .execute()
         .data

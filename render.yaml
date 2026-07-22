@@ -1,0 +1,59 @@
+# Render Blueprint for the PlacePrep API.
+#
+# This documents the exact deployment config as code, instead of leaving it
+# as undocumented manual dashboard clicks -- see DEPLOYMENT.md for the full
+# walkthrough (Supabase setup, Vercel frontend, and everything env vars here
+# reference). To use: Render dashboard -> New -> Blueprint -> point at this
+# repo. Render will read this file and propose the service below; secrets
+# (marked sync: false) still have to be filled in by hand in the dashboard
+# -- this file deliberately never contains real values.
+services:
+  - type: web
+    name: placeprep-api
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: server
+    buildCommand: >-
+      apt-get update &&
+      apt-get install -y tesseract-ocr poppler-utils &&
+      pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: CORS_ORIGINS
+        sync: false # your deployed Vercel URL(s), comma-separated -- see DEPLOYMENT.md
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: PDF_STORAGE_BUCKET
+        value: pdfs
+      - key: MAX_PDF_SIZE_BYTES
+        value: "26214400"
+      - key: MAX_IMAGE_SIZE_BYTES
+        value: "15728640"
+      - key: OCR_ENABLED
+        value: "true"
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      - key: RATE_LIMIT_DEFAULT
+        value: 120/minute
+      - key: RATE_LIMIT_UPLOAD
+        value: 10/minute
+      - key: RATE_LIMIT_QUIZ_SUBMIT
+        value: 30/minute
+      # RATE_LIMIT_STORAGE_URI intentionally omitted: unset means the
+      # in-memory limiter, correct for this single-instance free-tier plan.
+      # Add it (pointed at a Redis instance) only if you scale to more than
+      # one instance -- see app/core/rate_limit.py's own note on why.

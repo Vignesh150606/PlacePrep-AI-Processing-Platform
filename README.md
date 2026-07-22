@@ -2,6 +2,11 @@
 
 Placement Intelligence Platform for AI-assisted placement preparation.
 
+- **Architecture & diagrams**: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md)
+- **Deploying this yourself**: [`DEPLOYMENT.md`](DEPLOYMENT.md)
+- **Full project history / current status**: [`PROJECT_STATE.md`](PROJECT_STATE.md)
+- **Talking about this project in interviews**: [`docs/INTERVIEW_PREP.md`](docs/INTERVIEW_PREP.md)
+
 ## Workspace
 
 ```txt

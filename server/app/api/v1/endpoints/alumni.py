@@ -49,6 +49,7 @@ from pydantic import Field
 
 from app.api.deps import CurrentUser, get_current_user, is_admin, require_admin
 from app.core.exceptions import AppException, NotFoundError
+from app.core.query_safety import safe_filter_value
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
@@ -393,7 +394,7 @@ async def list_alumni(
         if mentorship_available is not None:
             q = q.eq("mentorship_available", mentorship_available)
         if search:
-            like = f"%{search}%"
+            like = safe_filter_value(f"%{search}%")
             or_clauses = f"job_title.ilike.{like},bio.ilike.{like},current_company_name.ilike.{like}"
             if matching_profile_ids:
                 or_clauses += f",profile_id.in.({','.join(matching_profile_ids)})"
