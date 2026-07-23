@@ -65,6 +65,7 @@ from pydantic import Field
 from app.api.deps import CurrentUser, get_current_user, is_admin, require_admin
 from app.core.config import get_settings
 from app.core.exceptions import AppException, NotFoundError
+from app.core.query_safety import safe_filter_value
 from app.core.rate_limit import upload_limit
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
@@ -383,7 +384,7 @@ async def list_resources(
             if tag_list:
                 q = q.overlaps("tags", tag_list)
         if search:
-            like = f"%{search}%"
+            like = safe_filter_value(f"%{search}%")
             q = q.or_(f"title.ilike.{like},description.ilike.{like}")
         return q
 

@@ -78,6 +78,19 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def handle_unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+        # Last-resort fallback only: FastAPI wires this specific handler
+        # into Starlette's `ServerErrorMiddleware`, which sits OUTSIDE
+        # every `app.add_middleware(...)`-registered middleware --
+        # including CORSMiddleware. A response built here never passes
+        # back out through CORSMiddleware, so it never gets
+        # Access-Control-Allow-Origin, and the browser reports a
+        # misleading CORS error for what's actually a server bug. The
+        # `catch_unhandled_exceptions` middleware in `main.py` is
+        # registered specifically to catch this first, one layer inside
+        # CORS, so this handler should rarely fire in practice -- it's
+        # kept only for the edge case of an exception raised mid-response
+        # (after headers were already sent), which no middleware can
+        # recover from anyway.
         logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

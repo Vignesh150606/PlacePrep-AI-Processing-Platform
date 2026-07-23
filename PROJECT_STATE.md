@@ -1,8 +1,213 @@
 # PlacePrep Project State
 
-Last updated: 2026-07-21 (Phase 16 -- Production Completion Audit: Settings Module)
+Last updated: 2026-07-22 (Phase 17 -- Release Candidate Audit)
 
 ## This pass, in one paragraph
+
+Asked to act as final release engineer and turn the repo into a
+production-ready Release Candidate -- security, performance, tech debt,
+docs, diagrams, an interview-prep artifact, no new features. Same audit-
+first discipline as every prior pass, and it surfaced two genuine,
+previously-undetected issues worth calling out plainly rather than
+burying in a list. **First**: a real PostgREST filter-injection
+vulnerability across five endpoints (resources/search/community/admin/
+alumni) -- user search text was interpolated raw into hand-built
+`.or_()` filter strings, verified at the `postgrest-py` source level to
+be parsed by PostgREST's own filter grammar (unlike the safe 2-arg
+`.ilike(column, pattern)` form), meaning a comma or parenthesis in a
+search box could inject an additional filter condition. Fixed with one
+shared, documented helper (`core/query_safety.py`) using `postgrest-py`'s
+own `sanitize_param`. **Second**: rate limiting was configured
+(`Limiter`, `RATE_LIMIT_DEFAULT`, the exception handler) but never
+actually enforced, because `SlowAPIMiddleware` -- the one line that makes
+`default_limits` apply to anything without an explicit per-route
+decorator -- was never registered; every route except the five with an
+explicit `@upload_limit()`/`@quiz_submit_limit()` had zero rate limiting
+despite a code comment claiming otherwise. Fixed, and verified live
+(middleware order confirmed via `app.user_middleware`, a real TestClient
+request confirmed both the fix and the new security-headers middleware).
+Also added: baseline security response headers (previously none beyond
+CORS); production now disables `/docs`/`/redoc`/`/openapi.json` (`main.py`
+gates them on `ENVIRONMENT`); confirmed `python-dotenv`/`python-multipart`
+etc. are genuine (if indirect) dependencies. `workbox-window` looked
+genuinely unused by the same grep-for-imports method -- until a full
+`pnpm -r build` caught that `vite-plugin-pwa`'s `virtual:pwa-register/
+react` module needs it resolvable at build time even though no app
+source file imports it directly; reverted the removal once the build
+failure made that concrete. Left as a documented example of exactly why
+"grep found no references" isn't sufficient to call a dependency dead --
+only a real build/import proved it either way, for this one and for
+`python-dotenv`/`python-multipart` above. Also normalized 10 files that had
+picked up CRLF line endings (of 208 checked) back to LF for consistency;
+reviewed several
+for-loop-plus-`.execute()` patterns in `question_merge.py` and the bulk
+question-action endpoint for N+1 risk and *deliberately left them
+unchanged* -- admin-only, rare, bounded row counts, and each genuinely
+needs per-row logic (JSON array transforms, per-item error isolation),
+so rewriting delicate merge/bulk-action code for a marginal, unmeasured
+performance gain would be worse engineering judgment than leaving it. A
+quick a11y sweep (missing alt text, unlabeled inputs, icon-only buttons)
+turned up nothing real -- the existing empty-`alt` and `<label>`-wrapped
+patterns were already correct. Documentation: added `DEPLOYMENT.md`
+(Supabase + Render + Vercel, previously undocumented beyond scattered
+`.env.example` comments) and a `render.yaml` Blueprint; added `LICENSE`
+(MIT); added `docs/architecture/ARCHITECTURE.md` (system diagram, grouped
+ERD, auth sequence diagram, upload pipeline diagram, all Mermaid so they
+render natively wherever this repo is viewed); added
+`docs/INTERVIEW_PREP.md`, written specifically to be honest about real
+trade-offs and the current testing gap rather than oversell anything.
+One correction to this file's own prior entry: Phase 16's summary
+described the Settings > Account avatar field as "no upload infrastructure
+exists" for choosing a URL-paste field over a real upload -- that's only
+half true. An `avatars` storage bucket with matching RLS has existed
+since migration 0002 and was simply never wired to any endpoint; this
+pass documents that gap in `DEPLOYMENT.md` rather than closing it, since
+building the upload endpoint would be a new feature, out of scope for a
+release-engineering pass. Verified (full suite, after every change above):
+`pnpm install`, `pnpm -r typecheck`, `pnpm -r lint`, `pnpm -r build`, `ruff
+check`, and a live `python -c "from app.main import app"` import --
+results below.
+
+## Phase 17 -- Release Candidate Audit detail
+
+**Security -- filter injection (the headline finding).** `.or_()` on the
+supabase-py/postgrest-py query builder takes a raw string that PostgREST
+itself parses (commas separate sibling conditions, parens nest them,
+`column.operator.value` triples are dot-separated) -- confirmed by reading
+`postgrest/base_request_builder.py` directly rather than assuming: `.or_()`
+sets its entire argument as the literal value of the `or` query
+parameter, unparsed by the SDK, while `.ilike(column, pattern)` binds its
+pattern to one named column key that PostgREST does not further
+comma-split. Five endpoints built a `.or_()` string by interpolating
+`f"%{search}%"` (raw user input) directly: `resources.py` (title/
+description search), `search.py` (PDF file_name/title), `community.py`
+(post title/description), `admin.py` (user full_name/email search --
+admin-only, but still a real access-control risk), and `alumni.py`
+(job_title/bio/company search). Fixed with `core/query_safety.py`'s
+`safe_filter_value()`, a thin, documented wrapper around `postgrest.utils.
+sanitize_param` (already shipped by the library, used internally for
+other filter methods, just not automatically applied to hand-built
+`.or_()` strings) -- it quotes a value if it contains any PostgREST-
+reserved character (`, : ( )`), which PostgREST's parser then treats as
+one escaped literal instead of syntax. Smoke-tested directly: a search
+term containing a comma or parenthesis now round-trips as quoted text
+instead of structurally splitting.
+
+**Security -- rate limiting was configured but not enforced.**
+`app.state.limiter = limiter` plus the `RateLimitExceeded` exception
+handler make the `Limiter` object *available* for `@limiter.limit(...)`-
+style decorators (which is what `@upload_limit()`/`@quiz_submit_limit()`
+use, and those five routes were genuinely protected) -- but
+`RATE_LIMIT_DEFAULT` on the `Limiter` constructor only applies
+automatically to *every other route* if `SlowAPIMiddleware` is also
+registered (confirmed by reading `slowapi/middleware.py`). It never was.
+Fixed with `app.add_middleware(SlowAPIMiddleware)` in `main.py`, placed so
+`CORSMiddleware` remains outermost (verified via `app.user_middleware`
+order) -- a rejected request still carries CORS headers on its 429,
+preserving the original design intent described in the comment that was
+already there. `RATE_LIMIT_DEFAULT` (120/minute) is generous enough that
+this doesn't affect the `BootGate`'s health-check retries (max ~12 over
+2 minutes) or any normal usage pattern.
+
+**Security -- baseline headers and docs exposure.** Added
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: strict-origin-when-cross-origin`, and a restrictive
+`Permissions-Policy`, via a small `@app.middleware("http")` handler
+(verified outermost in the stack, headers confirmed present on a live
+TestClient response). No CSP added deliberately -- this is a JSON API
+with no server-rendered HTML of its own; a CSP belongs on the frontend's
+own hosting config. Also gated `/docs`, `/redoc`, and `/openapi.json` to
+`None` when `ENVIRONMENT=production` (still on in development/staging) --
+previously the full endpoint/schema map, admin routes included, was
+exposed unconditionally in every environment. Verified both branches
+live (dev keeps `/docs`, production returns `None` for all three).
+
+**Dependency audit.** Checked every entry in `client/package.json` and
+`server/requirements.txt` against actual usage (allowing for subpath
+imports like `react-dom/client` and side-effect imports like
+`@fontsource/geist/400.css`, which a naive grep misses). `python-dotenv`
+and `python-multipart` looked unused by a first pass but are genuine
+transitive requirements (`pydantic-settings`'s `env_file=".env"` config
+needs the former; FastAPI's `UploadFile`/`Form` handling needs the
+latter) -- kept. `workbox-window` had zero references anywhere in
+`client/src` (PWA registration goes through `vite-plugin-pwa`'s own
+`virtual:pwa-register` module, see `use-pwa-update.ts`), so it was
+removed as apparently-unused -- and then put straight back once
+`pnpm -r build` failed: that virtual module resolves to
+`virtual:pwa-register/react` under the hood, which itself imports
+`workbox-window` and needs it present in `node_modules` regardless of
+whether app code imports it by name. Grep-for-imports is a fine first
+pass but isn't sufficient on its own to call a dependency dead; a real
+build is. Kept, with this reasoning written down so it isn't
+re-attempted the same way next time.
+
+**Performance / N+1 review.** Precisely detected every `for ... in ...:`
+loop followed by an `.execute()` call in its body (not just any loop) --
+six hits. Three are non-issues: `questions.py`'s bulk-action loop and
+`daily_challenge.py`'s weak-topics loop are legitimately bounded (a
+handful of items) and need per-item logic (individual success/failure
+results for the former); `processing.py`'s loop iterates a fixed 4-5
+value status enum, not user-scaled data. The other three
+(`question_merge.py`'s quiz_attempts/bookmarks/wrong_answer_marks
+reassignment loops) are the closer call: genuinely N+1-shaped, but
+admin-only, triggered only when merging duplicate questions (rare), row
+count bounded by "how many students touched this specific duplicate"
+(small for a college-scale app), and the quiz_attempts case specifically
+needs a per-row JSON array transform (find-and-replace within
+`question_ids`/`responses`) that a single bulk SQL statement can't
+express without a stored procedure. Decided against touching this
+delicate, correctness-critical, rarely-executed code for an unmeasured
+performance gain -- documented here as a reviewed-and-accepted trade-off,
+not silently ignored.
+
+**Tech debt.** CRLF-vs-LF was inconsistent (10 of 208 source files had
+CRLF -- `admin.py`, `questions.py`, `interview_experiences.py`, `pdfs.py`,
+`audit.py`, `router.tsx`, `nav-items.ts`, `use-admin.ts`,
+`admin-audit-log-page.tsx`, `admin-dashboard-page.tsx`), almost certainly
+from local Windows editing sessions (consistent with this file's earlier
+"Resolved Windows PowerShell environment issues" note). Normalized to LF
+to match the other 198 files -- a pure line-ending change, re-verified
+against typecheck/lint/ruff below to confirm no logic moved.
+
+**Accessibility spot-check.** Grepped for `<img>` without `alt`, raw
+`<input>` outside the `Input` component, and icon-only buttons. Both
+flagged `<img>` cases were false positives (multi-line tags; both already
+have `alt`, including a deliberate empty `alt=""` on the Settings avatar
+preview, which is the *correct* pattern for a decorative image next to a
+labeled text field, not a bug). The one raw checkbox `<input>`
+(`community-post-composer-dialog.tsx`) is already wrapped in a `<label>`
+with visible text -- valid implicit association. Nothing to fix.
+
+**Documentation.** `DEPLOYMENT.md` (new) walks Supabase project setup and
+migration order, Google OAuth provider config, all three storage buckets
+(including documenting the unused `avatars` one honestly rather than
+pretending it doesn't exist), Render backend deployment (with a new
+`render.yaml` Blueprint), Vercel frontend deployment, and a post-deploy
+checklist. `docs/architecture/ARCHITECTURE.md` (new) -- system diagram,
+a grouped/simplified ERD (the real schema is 18 migrations and ~25
+tables, too dense as one diagram), an authenticated-request sequence
+diagram, and the upload-to-question pipeline flow, all as Mermaid so they
+render natively in GitHub/most markdown viewers without extra tooling.
+`docs/INTERVIEW_PREP.md` (new) -- project pitch, defensible trade-off
+explanations, the security-audit findings above written up as a concrete
+story, and an SDET-focused section that's upfront about the lack of an
+automated test suite rather than talking around it. `LICENSE` (new, MIT).
+README now links all of the above plus `PROJECT_STATE.md` right at the
+top instead of only being discoverable by reading further in.
+
+**Verification.** Ran the full suite after every change above, not just
+at the end: `pnpm install`, `pnpm -r typecheck` (client + shared, clean),
+`pnpm -r lint` (clean), `pnpm -r build` (clean), `ruff check` (clean),
+and a live `python -c "from app.main import app"` confirming all 124
+routes still register post-fixes. Additional targeted verification beyond
+the standard suite: a `FastAPI TestClient` request confirming the new
+security headers are actually present on a live response; direct
+inspection of `app.user_middleware` confirming registration order;
+a direct unit-level check of `safe_filter_value()` against inputs
+containing commas and parentheses; both branches of the `/docs` gating
+exercised live (dev and production).
+
+## Phase 16 -- Production Completion Audit: Settings Module history
 
 Phase 16 arrived as a "Production Completion Audit" brief demanding zero
 placeholders anywhere in the app, a fully built-out Settings module, and a

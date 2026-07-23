@@ -24,6 +24,7 @@ PHASE 6 CHANGES:
   - New `POST /{canonical_id}/merge` -- Admin Review "Merge" (see
     services/question_merge.py for what actually happens).
 """
+import logging
 import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -41,6 +42,8 @@ from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
 from app.services import audit, lifecycle, notifications, question_authoring, question_merge
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -1159,6 +1162,29 @@ async def bulk_import_questions(payload: BulkImportRequest, admin_user: CurrentU
         except question_authoring.QuestionAuthoringError as exc:
             total_error += 1
             results.append(BulkImportItemResult(index=idx, imported=False, reason=f"invalid: {exc}"))
+            continue
+        except APIError as exc:
+            # A DB-level failure on this one row (e.g. a constraint
+            # violation, or Supabase rejecting a value the earlier
+            # validation didn't catch) -- previously unhandled here, which
+            # broke the "a single bad row never aborts the whole batch"
+            # promise above: it crashed the *entire* request as an
+            # unhandled 500 and silently discarded every already-imported
+            # row's result along with it, instead of reporting just this
+            # one row as failed and continuing.
+            logger.exception("bulk-import: row %s failed with a database error", idx)
+            total_error += 1
+            results.append(BulkImportItemResult(index=idx, imported=False, reason=f"database error: {exc.message}"))
+            continue
+        except Exception as exc:  # noqa: BLE001 -- deliberate: see comment above
+            # Catch-all safety net for anything else unexpected on a single
+            # row (bad/missing data shape, a downstream service hiccup,
+            # etc.) -- same reasoning as the APIError branch. Logged with
+            # the full traceback so it's still visible/debuggable, but it
+            # no longer takes the whole import down with it.
+            logger.exception("bulk-import: row %s failed unexpectedly", idx)
+            total_error += 1
+            results.append(BulkImportItemResult(index=idx, imported=False, reason=f"unexpected error: {exc}"))
             continue
 
         if result.is_duplicate:
