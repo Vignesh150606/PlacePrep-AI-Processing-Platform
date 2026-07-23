@@ -36,7 +36,6 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import CurrentUser, require_admin
 from app.core.exceptions import AppException, NotFoundError
-from app.core.query_safety import safe_filter_value
 from app.core.responses import ApiResponse, ok
 from app.core.schemas import CamelModel
 from app.core.supabase_client import get_supabase_admin
@@ -230,7 +229,7 @@ async def list_users(
         count_query = count_query.eq("role_id", _ROLE_IDS[role])
         list_query = list_query.eq("role_id", _ROLE_IDS[role])
     if search:
-        like_pattern = safe_filter_value(f"%{search}%")
+        like_pattern = f"%{search}%"
         or_filter = f"full_name.ilike.{like_pattern},email.ilike.{like_pattern}"
         count_query = count_query.or_(or_filter)
         list_query = list_query.or_(or_filter)
