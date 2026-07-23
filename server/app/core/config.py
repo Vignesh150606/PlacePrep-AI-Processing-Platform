@@ -42,9 +42,39 @@ class Settings(BaseSettings):
     # (a plain property, parsed after settings load) sidesteps that.
     CORS_ORIGINS: str = "http://localhost:5173"
 
+    # Root cause of the "backend is alive but every request is CORS-blocked"
+    # class of bug: CORSMiddleware only ever adds Access-Control-Allow-Origin
+    # for an origin that exactly, literally matches an entry in
+    # `allow_origins` -- no wildcards, no subdomain matching. Vercel issues a
+    # brand-new unique preview URL (`<project>-<random-hash>.vercel.app`) on
+    # *every* deploy, so pinning CORS_ORIGINS to one specific preview URL
+    # guarantees it goes stale on the very next deploy. CORS_ORIGIN_REGEX
+    # covers that: it's passed straight through to CORSMiddleware's
+    # `allow_origin_regex`, which Starlette matches with `re.fullmatch`
+    # against the request's Origin header, so it's safe to scope tightly to
+    # this project's own Vercel deployments instead of something broad like
+    # `.*\.vercel\.app` (which would trust every OTHER Vercel project too).
+    # Explicit stable origins (a custom domain, the production Vercel alias)
+    # still belong in CORS_ORIGINS -- this is specifically for the preview
+    # URLs that churn on every deploy.
+    CORS_ORIGIN_REGEX: Optional[str] = None
+
     @property
     def cors_origins(self) -> List[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        # Also strips a stray wrapping quote per entry -- pasting a quoted
+        # value into Render's env var UI (e.g. CORS_ORIGINS="https://foo")
+        # makes the quote characters part of the literal string, which then
+        # never matches a real Origin header (which never contains quotes).
+        return [
+            origin.strip().strip("'\"")
+            for origin in self.CORS_ORIGINS.split(",")
+            if origin.strip().strip("'\"")
+        ]
+
+    @property
+    def cors_origin_regex(self) -> Optional[str]:
+        value = (self.CORS_ORIGIN_REGEX or "").strip().strip("'\"")
+        return value or None
 
     # --- Supabase ---
     SUPABASE_URL: Optional[str] = None

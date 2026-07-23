@@ -24,7 +24,15 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: CORS_ORIGINS
-        sync: false # your deployed Vercel URL(s), comma-separated -- see DEPLOYMENT.md
+        sync: false # your STABLE deployed Vercel URL(s) (custom domain / production alias), comma-separated -- see DEPLOYMENT.md
+      - key: CORS_ORIGIN_REGEX
+        # Vercel issues a brand-new unique preview URL on every single
+        # deploy (place-prep-ai-processing-platform-client-<hash>.vercel.app),
+        # so a fixed CORS_ORIGINS entry goes stale the next time you deploy.
+        # This regex matches any preview (or production) deployment of THIS
+        # Vercel project by name, so it doesn't need to change per-deploy.
+        # If your Vercel project slug differs, update this to match it.
+        value: ^https://place-prep-ai-processing-platform-client(-[a-zA-Z0-9]+)*\.vercel\.app$
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY

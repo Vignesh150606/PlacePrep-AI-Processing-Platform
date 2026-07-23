@@ -53,14 +53,31 @@ If you'd rather configure it manually instead of via the Blueprint:
 - **Health check path**: `/api/v1/health`
 - **Environment variables** -- see `server/.env.example` for the full
   list with defaults; at minimum you must set `ENVIRONMENT=production`,
-  `CORS_ORIGINS` (your Vercel URL, added *after* step 3 below), and the
-  three Supabase values plus `GEMINI_API_KEY` from step 1/4.
+  `CORS_ORIGINS` (your stable Vercel URL, added *after* step 3 below), and
+  the three Supabase values plus `GEMINI_API_KEY` from step 1/4.
 
 Once deployed, `ENVIRONMENT=production` automatically disables `/docs`,
 `/redoc`, and `/openapi.json` (Phase 17 -- see `main.py`) and the startup
-log will loudly warn (not fail) if `CORS_ORIGINS` still looks like a
-localhost default, so a misconfigured deploy is visible in the logs
-instead of silently rejecting every browser request.
+log will loudly warn (not fail) if `CORS_ORIGINS`/`CORS_ORIGIN_REGEX` still
+look unset or localhost-only, so a misconfigured deploy is visible in the
+logs instead of silently rejecting every browser request.
+
+**Vercel preview deployments and CORS_ORIGIN_REGEX**: Vercel mints a brand
+new, unique URL (`<project>-<random-hash>.vercel.app`) for *every* deploy
+of a non-production branch. `CORS_ORIGINS` is an exact-match list, so
+pointing it at one preview URL breaks again the next time you deploy. The
+Blueprint (`render.yaml`) also sets `CORS_ORIGIN_REGEX`, matched against
+the request's `Origin` header, scoped to this project's Vercel deployments
+by name so it doesn't need to change per deploy -- only add/adjust
+`CORS_ORIGINS` for your stable, non-changing origins (a custom domain, or
+the production `.vercel.app` alias).
+
+If a browser tab shows a CORS error but `GET /api/v1/health` responds
+`200` when hit directly (e.g. with curl), the backend is up and the
+request handler ran fine -- `CORSMiddleware` just didn't recognize the
+requesting `Origin` and so didn't add `Access-Control-Allow-Origin` to the
+response, which is what makes the browser discard it. That's a
+`CORS_ORIGINS`/`CORS_ORIGIN_REGEX` mismatch, not a backend crash.
 
 Render's **free tier spins the instance down after ~15 minutes idle** and
 takes 30-60+ seconds to cold-start the next request -- the frontend's

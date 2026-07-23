@@ -38,13 +38,20 @@ def _warn_if_cors_misconfigured(settings) -> None:
     if settings.ENVIRONMENT != "production":
         return
     origins = settings.cors_origins
-    if not origins or all("localhost" in o or "127.0.0.1" in o for o in origins):
+    origins_look_unset = not origins or all("localhost" in o or "127.0.0.1" in o for o in origins)
+    if origins_look_unset and not settings.cors_origin_regex:
         logger.warning(
-            "CORS_ORIGINS is unset or still pointing at localhost while "
-            "ENVIRONMENT=production. Every request from your deployed "
-            "frontend will be blocked by the browser. Set CORS_ORIGINS to "
+            "CORS_ORIGINS is unset or still pointing at localhost, and "
+            "CORS_ORIGIN_REGEX is unset, while ENVIRONMENT=production. "
+            "Every request from your deployed frontend will be blocked by "
+            "the browser -- the backend will still return 200, but without "
+            "an Access-Control-Allow-Origin header, so the browser discards "
+            "the response before your app ever sees it. Set CORS_ORIGINS to "
             "your real frontend origin(s), e.g. "
-            "CORS_ORIGINS=https://your-app.vercel.app"
+            "CORS_ORIGINS=https://your-app.vercel.app -- and, if you deploy "
+            "on Vercel, also set CORS_ORIGIN_REGEX so preview-deployment "
+            "URLs (which change on every deploy) are covered too, e.g. "
+            r"CORS_ORIGIN_REGEX=^https://your-project(-[a-zA-Z0-9]+)*\.vercel\.app$"
         )
 
 
@@ -91,9 +98,16 @@ def create_app() -> FastAPI:
             content=fail(f"Rate limit exceeded: {exc.detail}. Please slow down.").model_dump(),
         )
 
+    # allow_origins: exact-match list for stable origins (custom domain,
+    # production Vercel alias, localhost in dev).
+    # allow_origin_regex: covers Vercel preview deployments, whose URL gets
+    # a new random hash on every single deploy -- see CORS_ORIGIN_REGEX's
+    # docstring in config.py. Starlette applies `re.fullmatch` against the
+    # Origin header for this, so it's exact/anchored, not a substring check.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=settings.cors_origin_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
