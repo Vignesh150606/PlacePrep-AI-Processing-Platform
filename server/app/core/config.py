@@ -46,17 +46,28 @@ class Settings(BaseSettings):
     # class of bug: CORSMiddleware only ever adds Access-Control-Allow-Origin
     # for an origin that exactly, literally matches an entry in
     # `allow_origins` -- no wildcards, no subdomain matching. Vercel issues a
-    # brand-new unique preview URL (`<project>-<random-hash>.vercel.app`) on
-    # *every* deploy, so pinning CORS_ORIGINS to one specific preview URL
-    # guarantees it goes stale on the very next deploy. CORS_ORIGIN_REGEX
-    # covers that: it's passed straight through to CORSMiddleware's
-    # `allow_origin_regex`, which Starlette matches with `re.fullmatch`
-    # against the request's Origin header, so it's safe to scope tightly to
-    # this project's own Vercel deployments instead of something broad like
-    # `.*\.vercel\.app` (which would trust every OTHER Vercel project too).
-    # Explicit stable origins (a custom domain, the production Vercel alias)
-    # still belong in CORS_ORIGINS -- this is specifically for the preview
-    # URLs that churn on every deploy.
+    # brand-new URL on *every* deploy, so pinning CORS_ORIGINS to one
+    # specific URL guarantees it goes stale on the next deploy.
+    # CORS_ORIGIN_REGEX (passed straight to CORSMiddleware's
+    # `allow_origin_regex`, matched with `re.fullmatch` against the
+    # request's Origin header) covers that -- with one caveat learned by
+    # hitting it in practice on this project: Vercel does NOT keep the
+    # project-name portion of its generated hostnames stable either. The
+    # same project has been observed as both
+    #   place-prep-ai-processing-platform-client-65udk2i79.vercel.app
+    #   place-prep-ai-processing-platform-c.vercel.app
+    # -- Vercel truncates the generated name to fit its own length budget,
+    # and where it cuts isn't predictable from outside. A regex anchored to
+    # a literal project-name prefix will eventually stop matching. The
+    # working pattern instead trusts any single-level `*.vercel.app`
+    # subdomain (see render.yaml/.env.example for the actual value) --
+    # broader than "just this project", but a reasonable trade-off here
+    # since auth is Bearer-token-based (see client/src/lib/api-client.ts),
+    # not cookie-based: another Vercel-hosted site matching this pattern
+    # still can't forge a request as a signed-in user without already
+    # having that user's token through some means unrelated to CORS. Explicit
+    # stable origins (a custom domain) still belong in CORS_ORIGINS if you'd
+    # rather not take that trade-off for your production origin specifically.
     CORS_ORIGIN_REGEX: Optional[str] = None
 
     @property

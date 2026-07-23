@@ -26,13 +26,30 @@ services:
       - key: CORS_ORIGINS
         sync: false # your STABLE deployed Vercel URL(s) (custom domain / production alias), comma-separated -- see DEPLOYMENT.md
       - key: CORS_ORIGIN_REGEX
-        # Vercel issues a brand-new unique preview URL on every single
-        # deploy (place-prep-ai-processing-platform-client-<hash>.vercel.app),
-        # so a fixed CORS_ORIGINS entry goes stale the next time you deploy.
-        # This regex matches any preview (or production) deployment of THIS
-        # Vercel project by name, so it doesn't need to change per-deploy.
-        # If your Vercel project slug differs, update this to match it.
-        value: ^https://place-prep-ai-processing-platform-client(-[a-zA-Z0-9]+)*\.vercel\.app$
+        # Vercel issues a new preview URL on every deploy, AND -- confirmed
+        # in practice on this project -- doesn't keep the project-name
+        # portion of that hostname stable either: the SAME project has been
+        # observed as both
+        #   place-prep-ai-processing-platform-client-65udk2i79.vercel.app
+        #   place-prep-ai-processing-platform-c.vercel.app
+        # (Vercel truncates the generated name to fit its own length
+        # budget, and where it cuts isn't predictable from outside.) A
+        # regex anchored to a literal project-name prefix is therefore NOT
+        # reliable here -- it broke the first time the truncation point
+        # shifted. This pattern instead trusts any single-level
+        # *.vercel.app subdomain (still anchored/full-match, so it does NOT
+        # match a non-Vercel host or a nested subdomain). That's
+        # deliberately broader than "just this project" -- acceptable here
+        # because auth is Bearer-token-based (see client/src/lib/api-
+        # client.ts), not cookie-based, so another Vercel-hosted site
+        # matching this pattern still can't forge a request as a signed-in
+        # user without already having that user's token through some other
+        # means unrelated to CORS. If you want it scoped tighter than that
+        # trade-off, don't rely on a guessed pattern -- put your project's
+        # exact current domain(s) in CORS_ORIGINS instead (copy them
+        # literally from Vercel's dashboard, not from a URL you've seen in
+        # one error message, since -- per the above -- it can change).
+        value: ^https://[a-zA-Z0-9-]+\.vercel\.app$
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY

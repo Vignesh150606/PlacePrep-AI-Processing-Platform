@@ -50,8 +50,10 @@ def _warn_if_cors_misconfigured(settings) -> None:
             "your real frontend origin(s), e.g. "
             "CORS_ORIGINS=https://your-app.vercel.app -- and, if you deploy "
             "on Vercel, also set CORS_ORIGIN_REGEX so preview-deployment "
-            "URLs (which change on every deploy) are covered too, e.g. "
-            r"CORS_ORIGIN_REGEX=^https://your-project(-[a-zA-Z0-9]+)*\.vercel\.app$"
+            "URLs (which change on every deploy, and don't keep a stable "
+            "name prefix -- see config.py's CORS_ORIGIN_REGEX docstring) "
+            "are covered too, e.g. "
+            r"CORS_ORIGIN_REGEX=^https://[a-zA-Z0-9-]+\.vercel\.app$"
         )
 
 
@@ -97,6 +99,48 @@ def create_app() -> FastAPI:
             status_code=429,
             content=fail(f"Rate limit exceeded: {exc.detail}. Please slow down.").model_dump(),
         )
+
+    # Uncaught-exception safety net -- deliberately registered here,
+    # BEFORE CORSMiddleware below, so it ends up *inside* it in the
+    # middleware stack (Starlette wraps middleware in the reverse of
+    # add-order, so whatever is added later becomes the outer layer).
+    #
+    # Why this exists: FastAPI/Starlette route a generic `@app.
+    # exception_handler(Exception)` handler (registered in
+    # `register_exception_handlers` below) into `ServerErrorMiddleware`,
+    # which sits OUTSIDE every middleware registered in this function --
+    # including CORSMiddleware. A response built there never passes back
+    # out through CORSMiddleware, so it never gets
+    # Access-Control-Allow-Origin. The browser then reports a *CORS*
+    # error for what's actually an ordinary server-side bug -- confirmed
+    # by reproducing it directly: an unhandled exception in a route
+    # produces a 500 with the correct JSON body but zero CORS headers.
+    # That's the "500 (Internal Server Error)" + "blocked by CORS policy"
+    # combination this project hit in `bulk-import` -- the request wasn't
+    # actually a CORS/origin problem, it was a real bug in the endpoint
+    # (see the widened per-row exception handling in
+    # `api/v1/endpoints/questions.py::bulk_import_questions`) whose 500
+    # response the browser then couldn't read because of *this* gap.
+    #
+    # Catching one layer inside CORS means any unhandled exception still
+    # becomes a normal Response flowing back out through CORSMiddleware
+    # like any other response, so the browser can see the real error
+    # instead of a misleading CORS message. The generic `Exception`
+    # handler in `register_exception_handlers` is kept as a last-resort
+    # fallback for the rare case something escapes even this (e.g. an
+    # exception raised mid-stream, after response headers were already
+    # sent -- a known edge case of Starlette's `BaseHTTPMiddleware` that
+    # isn't fixable from inside a middleware at all).
+    @app.middleware("http")
+    async def catch_unhandled_exceptions(request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception:
+            logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+            return JSONResponse(
+                status_code=500,
+                content=fail("Internal server error.").model_dump(),
+            )
 
     # allow_origins: exact-match list for stable origins (custom domain,
     # production Vercel alias, localhost in dev).

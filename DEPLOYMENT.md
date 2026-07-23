@@ -62,15 +62,27 @@ log will loudly warn (not fail) if `CORS_ORIGINS`/`CORS_ORIGIN_REGEX` still
 look unset or localhost-only, so a misconfigured deploy is visible in the
 logs instead of silently rejecting every browser request.
 
-**Vercel preview deployments and CORS_ORIGIN_REGEX**: Vercel mints a brand
-new, unique URL (`<project>-<random-hash>.vercel.app`) for *every* deploy
-of a non-production branch. `CORS_ORIGINS` is an exact-match list, so
-pointing it at one preview URL breaks again the next time you deploy. The
-Blueprint (`render.yaml`) also sets `CORS_ORIGIN_REGEX`, matched against
-the request's `Origin` header, scoped to this project's Vercel deployments
-by name so it doesn't need to change per deploy -- only add/adjust
-`CORS_ORIGINS` for your stable, non-changing origins (a custom domain, or
-the production `.vercel.app` alias).
+**Vercel preview deployments and CORS_ORIGIN_REGEX**: Vercel mints a new
+URL for every deploy of a non-production branch, and -- confirmed on this
+project -- doesn't even keep the *project-name* portion of that hostname
+stable: the same app has been seen as both
+`place-prep-ai-processing-platform-client-65udk2i79.vercel.app` and
+`place-prep-ai-processing-platform-c.vercel.app` (Vercel truncates the
+generated name to fit its own length budget, unpredictably from outside).
+Don't try to guess a prefix pattern from one URL you've seen -- it will
+stop matching the next time Vercel truncates differently. The Blueprint
+(`render.yaml`) instead sets `CORS_ORIGIN_REGEX` to trust any single-level
+`*.vercel.app` subdomain (`^https://[a-zA-Z0-9-]+\.vercel\.app$`), which
+is stable regardless of Vercel's naming. That's broader than "just this
+project" -- acceptable here because the app authenticates with a Bearer
+token (`client/src/lib/api-client.ts`), not a cookie, so another
+Vercel-hosted site matching the pattern still can't act as a signed-in
+user without already having that user's token through some means
+unrelated to CORS. If you'd rather not take that trade-off, don't rely on
+a pattern at all: put your project's exact current domain(s) in
+`CORS_ORIGINS`, copied literally from Vercel's dashboard (Project ->
+Settings -> Domains) -- not from a URL you saw in a browser error, since
+per the above it can change.
 
 If a browser tab shows a CORS error but `GET /api/v1/health` responds
 `200` when hit directly (e.g. with curl), the backend is up and the
@@ -78,6 +90,18 @@ request handler ran fine -- `CORSMiddleware` just didn't recognize the
 requesting `Origin` and so didn't add `Access-Control-Allow-Origin` to the
 response, which is what makes the browser discard it. That's a
 `CORS_ORIGINS`/`CORS_ORIGIN_REGEX` mismatch, not a backend crash.
+
+**If the browser instead shows a CORS error *and* a `500` status** (e.g.
+in the Network tab), that combination doesn't mean the request was
+blocked before it ran -- it means the request completed, the endpoint hit
+a real, unhandled bug, and the resulting error response itself was
+missing `Access-Control-Allow-Origin` (Starlette routes an uncaught
+exception through `ServerErrorMiddleware`, which sits outside every
+`app.add_middleware(...)` layer including CORS, unless something inside
+the stack -- see `catch_unhandled_exceptions` in `main.py` -- intercepts
+it first). Check the Render service logs for the actual traceback; that's
+the real bug to fix, and it'll be a normal endpoint bug, not a CORS
+config issue.
 
 Render's **free tier spins the instance down after ~15 minutes idle** and
 takes 30-60+ seconds to cold-start the next request -- the frontend's
