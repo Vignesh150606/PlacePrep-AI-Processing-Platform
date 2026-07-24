@@ -10,10 +10,18 @@ mention of "Render's build image" in `server/README.md`.
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. Run every migration in `supabase/migrations/`, **in order** (`0001_...`
-   through `0018_...` as of this pass), via the SQL editor or the Supabase
+   through `0019_...` as of this pass), via the SQL editor or the Supabase
    CLI (`supabase db push`). Each one is idempotent (`create table if not
    exists`, `add column if not exists`) but still must run in numeric order
    -- later ones assume earlier tables/columns already exist.
+   **If your project already has 0001-0018 applied**, you specifically need
+   to run `0019_fix_confidence_score_nullable.sql` -- without it, every
+   question created through the Admin Manual Builder, Student Submission,
+   or Smart Bulk Parser fails outright with `null value in column
+   "confidence_score" ... violates not-null constraint` (only the AI
+   pipeline ever supplies that column; migration 0003 required it anyway,
+   which 0019 corrects). See that file's own comment for the full
+   explanation.
 3. **Auth providers**: enable Email and Google under Authentication ->
    Providers. For Google, you'll need an OAuth client ID/secret from the
    [Google Cloud Console](https://console.cloud.google.com/) -- add
