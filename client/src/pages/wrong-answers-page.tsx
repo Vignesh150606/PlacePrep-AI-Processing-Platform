@@ -6,6 +6,7 @@ import { useQuestions } from "@/hooks/use-questions";
 import { useCompanies } from "@/hooks/use-companies";
 import { useSetWrongAnswerResolved, useWrongAnswers } from "@/hooks/use-wrong-answers";
 import { QuestionCard } from "@/components/questions/question-card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -132,16 +133,33 @@ export function WrongAnswersPage() {
           {visibleEntries.map((entry) => {
             const question = questionById.get(entry.questionId);
             if (!question) return null;
+            const selectedOptions = question.options.filter((o) => entry.lastSelectedOptionIds.includes(o.id));
+            const correctOptions = question.options.filter((o) => o.isCorrect);
             return (
               <div key={entry.questionId} className="flex flex-col gap-2">
                 <QuestionCard
                   question={question}
                   companyName={question.companyId ? companyNameById.get(question.companyId) : null}
                 />
+                {(selectedOptions.length > 0 || correctOptions.length > 0) && (
+                  <div className="flex flex-col gap-1 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs">
+                    {selectedOptions.length > 0 && (
+                      <p className="text-incorrect-600 dark:text-incorrect-500">
+                        Your answer: {selectedOptions.map((o) => `${o.label}. ${o.text}`).join(", ")}
+                      </p>
+                    )}
+                    <p className="text-correct-600 dark:text-correct-500">
+                      Correct answer: {correctOptions.map((o) => `${o.label}. ${o.text}`).join(", ")}
+                    </p>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs text-muted-foreground">
-                  <span>
+                  <span className="flex items-center gap-2">
                     Missed {entry.timesWrong} time{entry.timesWrong === 1 ? "" : "s"} · last{" "}
                     {formatRelativeTime(entry.lastAttemptAt)}
+                    <Badge variant={entry.resolved ? "correct" : "warning"}>
+                      {entry.resolved ? "Reviewed" : "Needs review"}
+                    </Badge>
                   </span>
                   {!entry.resolved ? (
                     <div className="flex gap-1.5">

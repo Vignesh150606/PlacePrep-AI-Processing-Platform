@@ -7,6 +7,9 @@ export interface WrongAnswerEntry {
   timesWrong: number;
   lastAttemptAt: string;
   resolved: boolean;
+  /** Option ids the student picked on their most recent wrong attempt --
+   * empty for entries recorded before this was tracked. */
+  lastSelectedOptionIds: string[];
 }
 
 interface WrongAnswerListResponse {

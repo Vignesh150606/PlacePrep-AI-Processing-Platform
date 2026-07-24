@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, AlertTriangle, XCircle, History, PenLine } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, History, PenLine, ClipboardCopy, FileText } from "lucide-react";
 import type { BulkParsePreviewItem, QuestionAuthoringInput } from "@placeprep/shared";
 import {
   useBulkImportQuestions,
@@ -15,8 +15,32 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatRelativeTime } from "@/lib/format";
+import { formatRelativeTime, combinedExplanationText } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
+
+const TEMPLATE_EXAMPLE = `Question: What is the SI unit of torque?
+A) Joule
+B) Newton
+C) Newton-meter
+D) Watt
+Answer: C
+Explanation: Torque is measured in Newton-meter because it is the product of force and perpendicular distance.
+Difficulty: Easy
+Subject: Engineering Mechanics
+Topic: Torque
+
+---
+
+Question: What is Ohm's law?
+A) V = IR
+B) V = I/R
+C) V = I + R
+D) V = I - R
+Answer: A
+Solution: Ohm's law states that voltage equals current multiplied by resistance.
+Difficulty: Medium
+Subject: Basic Electrical Engineering
+Topic: Circuit Laws`;
 
 const STATUS_META: Record<
   BulkParsePreviewItem["status"],
@@ -36,6 +60,7 @@ export function AdminBulkImportPage() {
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [overrides, setOverrides] = useState<Record<number, QuestionAuthoringInput>>({});
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [showTemplate, setShowTemplate] = useState(true);
   // Previously the only feedback after an import was an aggregate toast
   // ("Imported X of Y") -- when rows failed, there was no way to see WHY
   // without pulling server logs, since the API's per-row `results[].reason`
@@ -122,11 +147,71 @@ export function AdminBulkImportPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-foreground">Smart Bulk Question Parser</h1>
         <p className="text-sm text-muted-foreground">
-          Paste dozens or hundreds of questions in the "Q1. / A. B. C. D. / Answer: / Solution:" format. No AI
-          involved -- pure parsing, run through the same validation and duplicate detection as everything else in
-          the bank.
+          Paste dozens or hundreds of questions at once. No AI involved -- pure parsing, run through the same
+          validation and duplicate detection as everything else in the bank.
         </p>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="size-4" /> Bulk import template
+          </CardTitle>
+          <Button size="sm" variant="ghost" onClick={() => setShowTemplate((v) => !v)}>
+            {showTemplate ? "Hide" : "Show"}
+          </Button>
+        </CardHeader>
+        {showTemplate && (
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-foreground">Supported format</p>
+              <pre className="overflow-x-auto rounded-lg border border-border bg-surface-raised px-3 py-2.5 font-mono text-xs leading-relaxed text-foreground">
+                {TEMPLATE_EXAMPLE}
+              </pre>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-fit"
+                onClick={() => {
+                  setRawText((prev) => (prev.trim() ? `${prev}\n\n---\n\n${TEMPLATE_EXAMPLE}` : TEMPLATE_EXAMPLE));
+                  toast.success("Template added to the paste area below.");
+                }}
+              >
+                <ClipboardCopy className="size-3.5" />
+                Use this template
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 border-t border-border-subtle pt-3 text-xs text-muted-foreground sm:grid-cols-2">
+              <p>
+                <span className="font-medium text-foreground">"Question:"</span> is mandatory -- "Q1.", "Q1)", or a
+                bare "1." also work.
+              </p>
+              <p>
+                <span className="font-medium text-foreground">Four options (A-D)</span> -- "A)", "A.", or "A:" all
+                accepted.
+              </p>
+              <p>
+                <span className="font-medium text-foreground">"Answer:"</span> or "Correct Answer:" -- required.
+              </p>
+              <p>
+                <span className="font-medium text-foreground">"Explanation:"</span> or "Solution:" -- optional,
+                treated as the same field.
+              </p>
+              <p>
+                <span className="font-medium text-foreground">"Difficulty:", "Subject:", "Topic:", "Company:"</span>{" "}
+                -- all optional.
+              </p>
+              <p>
+                <span className="font-medium text-foreground">"Tags:"</span> -- optional, comma-separated.
+              </p>
+              <p className="sm:col-span-2">
+                Separate questions with a line of <span className="font-medium text-foreground">"---"</span>. Extra
+                blank lines and repeated separators are ignored.
+              </p>
+            </div>
+          </CardContent>
+        )}
+      </Card>
 
       <Card>
         <CardHeader>
@@ -135,7 +220,7 @@ export function AdminBulkImportPage() {
         <CardContent className="flex flex-col gap-3">
           <textarea
             className="min-h-56 rounded-lg border border-border bg-surface-raised px-3 py-2 font-mono text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            placeholder={"Q1. What is...\nA. ...\nB. ...\nAnswer: B\nSolution: ...\n\n---\n\nQ2. ..."}
+            placeholder={"Question: What is...\nA) ...\nB) ...\nC) ...\nD) ...\nAnswer: B\nExplanation: ...\n\n---\n\nQuestion: ..."}
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
           />
@@ -164,6 +249,7 @@ export function AdminBulkImportPage() {
                   <TableHead className="w-10">Import</TableHead>
                   <TableHead className="w-44">Status</TableHead>
                   <TableHead>Question</TableHead>
+                  <TableHead>Explanation</TableHead>
                   <TableHead>Warnings</TableHead>
                   <TableHead className="w-16" />
                 </TableRow>
@@ -192,6 +278,18 @@ export function AdminBulkImportPage() {
                         <p className="line-clamp-2 text-xs text-foreground">
                           {current?.text || item.rawBlock.slice(0, 120)}
                         </p>
+                      </TableCell>
+                      <TableCell className="max-w-xs">
+                        {current && combinedExplanationText(current.correctExplanation, current.solutionSteps) ? (
+                          <p
+                            className="line-clamp-2 text-xs text-muted-foreground"
+                            title={combinedExplanationText(current.correctExplanation, current.solutionSteps) ?? undefined}
+                          >
+                            {combinedExplanationText(current.correctExplanation, current.solutionSteps)}
+                          </p>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/60">None detected</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <ul className="list-disc pl-4 text-xs text-muted-foreground">

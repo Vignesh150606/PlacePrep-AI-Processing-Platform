@@ -2,6 +2,7 @@ import { RotateCcw, CheckCircle2, XCircle, MinusCircle, Clock, Target } from "lu
 import type { Question, QuestionResponse } from "@placeprep/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ExplanationSection } from "@/components/questions/explanation-section";
 import { formatDuration, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -95,9 +96,11 @@ export function QuizResult({ questions, responses, timeTakenSeconds, onRetry }: 
                       Correct answer: {correctOption?.text}
                     </p>
                   )}
-                  {question.correctExplanation && (
-                    <p className="mt-1.5 text-xs text-muted-foreground">{question.correctExplanation}</p>
-                  )}
+                  <ExplanationSection
+                    correctExplanation={question.correctExplanation}
+                    solutionSteps={question.solutionSteps}
+                    className="mt-2"
+                  />
                 </div>
               </div>
             </Card>

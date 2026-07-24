@@ -55,3 +55,17 @@ export function formatDuration(totalSeconds: number): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return hrs > 0 ? `${hrs}:${pad(mins)}:${pad(secs)}` : `${mins}:${pad(secs)}`;
 }
+
+/** Plain-text combination of a question's `correctExplanation` and
+ * `solutionSteps` fields, for contexts that need a single truncated
+ * preview string rather than the full interactive `ExplanationSection`
+ * (e.g. a table cell with a tooltip -- see the Bulk Import Preview's
+ * Explanation column). Not for rendering as HTML; it's a plain string. */
+export function combinedExplanationText(
+  correctExplanation?: string | null,
+  solutionSteps?: string | null,
+): string | null {
+  const parts = [correctExplanation?.trim(), solutionSteps?.trim()].filter((p): p is string => Boolean(p));
+  if (parts.length === 0) return null;
+  return parts.join("\n\n");
+}

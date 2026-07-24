@@ -274,6 +274,7 @@ async def submit_attempt(
     stat_answered: List[bool] = []
     stat_corrects: List[bool] = []
     wrong_question_ids: List[str] = []
+    wrong_selected_options: Dict[str, List[str]] = {}
 
     for response in payload.responses:
         correct_ids = correct_option_by_question.get(response.question_id, set())
@@ -302,6 +303,7 @@ async def submit_attempt(
 
         if not was_skipped and not is_correct:
             wrong_question_ids.append(response.question_id)
+            wrong_selected_options[response.question_id] = response.selected_option_ids
 
     # --- Real accuracy stats, one atomic round trip for the whole quiz ---
     # (previously: one SELECT + one UPDATE per response -- see module
@@ -335,6 +337,11 @@ async def submit_attempt(
                 "times_wrong": existing_times_wrong.get(qid, 0) + 1,
                 "last_attempt_at": now,
                 "resolved": False,
+                # What the student picked THIS time -- overwritten (not
+                # accumulated) on every wrong attempt, so it always
+                # reflects the most recent miss, matching
+                # `last_attempt_at`'s own "most recent" semantics.
+                "last_selected_option_ids": wrong_selected_options.get(qid, []),
             }
             for qid in wrong_question_ids
         ]
@@ -382,6 +389,7 @@ class WrongAnswerEntryResponse(CamelModel):
     times_wrong: int
     last_attempt_at: str
     resolved: bool
+    last_selected_option_ids: List[str] = []
 
 
 class WrongAnswerListResponse(CamelModel):
@@ -410,6 +418,7 @@ async def list_wrong_answers(current_user: CurrentUser = Depends(get_current_use
             times_wrong=r["times_wrong"],
             last_attempt_at=r["last_attempt_at"],
             resolved=r["resolved"],
+            last_selected_option_ids=r.get("last_selected_option_ids") or [],
         )
         for r in rows
     ]

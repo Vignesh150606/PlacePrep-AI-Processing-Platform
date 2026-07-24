@@ -34,6 +34,7 @@ import { useCompanies } from "@/hooks/use-companies";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge, DifficultyBadge } from "@/components/ui/badge";
+import { ExplanationSection } from "@/components/questions/explanation-section";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -60,12 +61,14 @@ function EditQuestionDialog({
   const { update } = useReviewQuestion();
   const [text, setText] = React.useState("");
   const [explanation, setExplanation] = React.useState("");
+  const [solution, setSolution] = React.useState("");
   const [difficulty, setDifficulty] = React.useState<DifficultyLevel>("medium");
 
   React.useEffect(() => {
     if (question) {
       setText(question.text);
       setExplanation(question.correctExplanation ?? "");
+      setSolution(question.solutionSteps ?? "");
       setDifficulty(question.difficulty);
     }
   }, [question]);
@@ -75,7 +78,10 @@ function EditQuestionDialog({
   function handleSave() {
     if (!question) return;
     update.mutate(
-      { id: question.id, patch: { text, correctExplanation: explanation || null, difficulty } },
+      {
+        id: question.id,
+        patch: { text, correctExplanation: explanation || null, solutionSteps: solution || null, difficulty },
+      },
       {
         onSuccess: () => {
           toast.success("Question updated.");
@@ -111,6 +117,21 @@ function EditQuestionDialog({
               value={explanation}
               onChange={(e) => setExplanation(e.target.value)}
               rows={2}
+              className="rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="edit-solution">
+              Full solution
+              <span className="ml-1 font-normal text-muted-foreground">
+                (bulk-imported "Solution:"/"Explanation:" text lands here)
+              </span>
+            </Label>
+            <textarea
+              id="edit-solution"
+              value={solution}
+              onChange={(e) => setSolution(e.target.value)}
+              rows={3}
               className="rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
@@ -612,6 +633,10 @@ export function AdminReviewPage() {
                       </li>
                     ))}
                   </ul>
+                  <ExplanationSection
+                    correctExplanation={question.correctExplanation}
+                    solutionSteps={question.solutionSteps}
+                  />
                   {question.status === "rejected" && question.rejectionReason && (
                     <p className="text-xs text-incorrect-600">Rejected: {question.rejectionReason}</p>
                   )}

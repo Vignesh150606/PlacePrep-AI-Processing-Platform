@@ -313,9 +313,27 @@ _QUESTION_BOUNDARY_RE = re.compile(
 # A question can also start inline, e.g. "Q1. What is..." on one line --
 # handled separately in `_split_blocks` since the regex above only matches
 # a boundary marker that is the WHOLE line (the separator case).
+#
+# Deliberately narrow (requires the "Q"/"Question" word, not just a bare
+# number): this is also used to decide where to SPLIT the raw paste into
+# separate blocks (see `_split_blocks`), and a bare "1." is common inside a
+# numbered explanation ("1. First, ... 2. Then, ...") -- broadening this
+# one to match bare numbers would cause a false split mid-explanation. The
+# official template's questions are separated by an explicit '---' line
+# anyway (see the Bulk Import Template in the UI), so this only needs to
+# handle the no-separator convenience case, not every accepted prefix.
 _INLINE_Q_START_RE = re.compile(r"^\s*Q(?:uestion)?\.?\s*(\d+)[\.\):]\s*(.*)$", re.IGNORECASE)
+
+# Broader: also strips a bare "Question:" (no number -- the official
+# template's own format, see the Bulk Import Template) or a bare "1."/"1)"
+# from the FIRST line of an already-delimited block. Used only for
+# first-line stripping in `_parse_block`, never for splitting -- see the
+# comment on `_INLINE_Q_START_RE` above for why those two jobs need
+# different regexes.
+_Q_PREFIX_RE = re.compile(r"^\s*(?:Q(?:uestion)?\.?\s*\d*|\d+)[\.\):]\s*(.*)$", re.IGNORECASE)
 _OPTION_RE = re.compile(r"^\s*([A-Za-z])[\.\):]\s*(.+)$")
-_ANSWER_RE = re.compile(r"^\s*Answer\s*[:\-]\s*(.+)$", re.IGNORECASE)
+# "Correct Answer:" accepted as a synonym for "Answer:" (Part 11).
+_ANSWER_RE = re.compile(r"^\s*(?:Correct\s+)?Answer\s*[:\-]\s*(.+)$", re.IGNORECASE)
 _SOLUTION_RE = re.compile(r"^\s*(?:Solution|Explanation)\s*[:\-]\s*(.*)$", re.IGNORECASE)
 _DIFFICULTY_RE = re.compile(r"^\s*Difficulty\s*[:\-]\s*(.+)$", re.IGNORECASE)
 _TAGS_RE = re.compile(r"^\s*Tags?\s*[:\-]\s*(.+)$", re.IGNORECASE)
@@ -388,10 +406,10 @@ def _parse_block(block_text: str) -> ParsedQuestionBlock:
     for raw_line in block_text.split("\n"):
         line = raw_line.rstrip()
 
-        inline_start = _INLINE_Q_START_RE.match(line)
+        inline_start = _Q_PREFIX_RE.match(line)
         if inline_start and not question_lines and not parsed.options:
-            # Strip the "Q1." prefix off the very first line only.
-            question_lines.append(inline_start.group(2))
+            # Strip the "Question:"/"Q1."/"1." prefix off the very first line only.
+            question_lines.append(inline_start.group(1))
             continue
 
         opt_match = _OPTION_RE.match(line) if mode == "question" else None

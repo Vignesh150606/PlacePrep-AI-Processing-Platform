@@ -4,6 +4,7 @@ import type { Question } from "@placeprep/shared";
 import { Card } from "@/components/ui/card";
 import { Badge, DifficultyBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ExplanationSection } from "@/components/questions/explanation-section";
 import { useIsAdmin } from "@/hooks/use-profile";
 import { useReviewQuestion } from "@/hooks/use-admin-questions";
 import { formatPercent } from "@/lib/format";
@@ -109,6 +110,8 @@ export function QuestionCard({
           </li>
         ))}
       </ul>
+
+      <ExplanationSection correctExplanation={question.correctExplanation} solutionSteps={question.solutionSteps} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>
