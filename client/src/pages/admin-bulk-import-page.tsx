@@ -6,6 +6,7 @@ import {
   useBulkImportQuestions,
   useBulkParseQuestions,
   useImportBatches,
+  type BulkImportResponse,
 } from "@/hooks/use-question-authoring";
 import { QuestionAuthoringForm } from "@/components/questions/question-authoring-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,16 @@ export function AdminBulkImportPage() {
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [overrides, setOverrides] = useState<Record<number, QuestionAuthoringInput>>({});
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  // Previously the only feedback after an import was an aggregate toast
+  // ("Imported X of Y") -- when rows failed, there was no way to see WHY
+  // without pulling server logs, since the API's per-row `results[].reason`
+  // was fetched but simply discarded. `submitted` is a snapshot of what was
+  // actually sent, kept alongside the response purely so a failed row can
+  // still show its question text after `items`/`rawText` are cleared below.
+  const [lastImport, setLastImport] = useState<{
+    response: BulkImportResponse;
+    submitted: QuestionAuthoringInput[];
+  } | null>(null);
 
   const parse = useBulkParseQuestions();
   const bulkImport = useBulkImportQuestions();
@@ -81,7 +92,20 @@ export function AdminBulkImportPage() {
       { items: toImport, label: label.trim() || null },
       {
         onSuccess: (result) => {
-          toast.success(`Imported ${result.totalImported} of ${result.totalSubmitted} question(s).`);
+          setLastImport({ response: result, submitted: toImport });
+          if (result.totalError > 0) {
+            // Was previously a bare success toast even when every single
+            // row failed (the 500-Internal-Server-Error/all-rows-failed
+            // case) -- nothing distinguished "25 imported" from
+            // "0 imported, 25 errored" except the wording of one line of
+            // toast text, and the actual reason for each failure was
+            // nowhere in the UI. The results card below now shows it.
+            toast.warning(
+              `Imported ${result.totalImported} of ${result.totalSubmitted} -- ${result.totalError} failed. See details below.`,
+            );
+          } else {
+            toast.success(`Imported ${result.totalImported} of ${result.totalSubmitted} question(s).`);
+          }
           setItems([]);
           setRawText("");
           setLabel("");
@@ -198,6 +222,59 @@ export function AdminBulkImportPage() {
                 {bulkImport.isPending ? "Importing..." : `Import ${includedCount} question(s)`}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {lastImport && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle>
+              Last import: {lastImport.response.totalImported} imported, {lastImport.response.totalDuplicate}{" "}
+              duplicate, {lastImport.response.totalError} failed
+            </CardTitle>
+            <Button size="sm" variant="ghost" onClick={() => setLastImport(null)}>
+              Dismiss
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {lastImport.response.totalError === 0 && lastImport.response.totalDuplicate === 0 ? (
+              <p className="text-sm text-muted-foreground">Every row imported cleanly.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-24">Result</TableHead>
+                    <TableHead>Question</TableHead>
+                    <TableHead>Reason</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lastImport.response.results
+                    .filter((r) => !r.imported)
+                    .map((r) => {
+                      const isDuplicate = r.reason === "duplicate";
+                      const submittedItem = lastImport.submitted[r.index];
+                      return (
+                        <TableRow key={r.index}>
+                          <TableCell>
+                            <Badge variant={isDuplicate ? "warning" : "incorrect"} className="flex w-fit items-center gap-1">
+                              {isDuplicate ? <AlertTriangle className="size-3" /> : <XCircle className="size-3" />}
+                              {isDuplicate ? "Duplicate" : "Failed"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="max-w-md">
+                            <p className="line-clamp-2 text-xs text-foreground">
+                              {submittedItem?.text ?? `Row ${r.index + 1}`}
+                            </p>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{r.reason}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       )}

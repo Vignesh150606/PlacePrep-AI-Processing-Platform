@@ -18,14 +18,14 @@ interface AssetUploadResponse {
   fileSizeBytes: number;
 }
 
-interface BulkImportItemResult {
+export interface BulkImportItemResult {
   index: number;
   imported: boolean;
   questionId?: string;
   reason?: string;
 }
 
-interface BulkImportResponse {
+export interface BulkImportResponse {
   batchId: string;
   totalSubmitted: number;
   totalImported: number;
