@@ -2346,3 +2346,105 @@ verified, and an explicit list of what was deliberately left out.
   always 0 in practice. Not fixed this pass (out of scope, found while
   working on something else); flagged here so it isn't lost.
 
+## Phase 19 -- Release-QA pass: the Daily Challenge bug, root-caused (this pass)
+
+Scope: another large external prompt, this time framed as a pre-release QA
+sweep with one specific reported bug ("click Start Daily Challenge, it
+loads forever, the quiz never starts") plus a broad "audit every button/
+page/dialog/animation/accessibility issue in the app" mandate. As with
+Phase 18's brief, the broad mandate was not attempted wholesale -- no
+browser is available in this environment, so claiming to have "clicked
+every button" or verified anything visually (mobile layout, dark/light
+rendering, animation smoothness, focus rings) would be dishonest. What
+*was* done: the reported bug was actually traced to a root cause and
+fixed (not patched around), plus a real, bounded static-analysis pass for
+the same class of defect elsewhere.
+
+### The Daily Challenge bug -- root cause
+
+Traced the full path: `DailyChallengeCard` -> `Link` -> `/quiz?mode=
+daily-challenge` -> `quiz-page.tsx`'s auto-start effect -> `POST /quizzes/
+attempts` -> `QuizRunner`. The button, the link, the route, and the API
+call were all fine in isolation. The actual defect was in the auto-start
+effect's very first guard:
+
+```
+if (!isDailyChallenge || stage.step !== "config" || inProgressLoading || inProgress) return;
+```
+
+Starting *any* quiz -- including the Daily Challenge itself -- inserts an
+`"in-progress"` row into `quiz_attempts`, the same as every other mode
+(`start_attempt` in `quizzes.py`, unchanged, correct, not the bug). If a
+student starts today's challenge and doesn't finish it in one sitting
+(closes the tab mid-quiz, or during QA testing: click Start, check
+something else, come back), `useInProgressAttempt()` returns that same
+attempt on every later visit. The guard above saw it and bailed out
+*silently and permanently* -- no auto-start, ever, again, for that day --
+with nothing on screen connecting the resulting generic "You have an
+interrupted quiz" banner back to the button the student actually clicked.
+Trivially reproducible: start the challenge, back out before finishing,
+click "Start Daily Challenge" again. This is almost certainly exactly how
+it was found -- it's the natural first thing anyone testing a brand-new
+"start a quiz" feature does.
+
+**Fix, not a patch:** the effect now tells the two cases apart instead of
+treating every in-progress attempt identically --
+- If the in-progress attempt's question set exactly matches today's
+  challenge's question set, it *is* the challenge, abandoned mid-way --
+  resume it directly, no extra click, no banner.
+- If it's a genuinely different interrupted quiz, don't guess and don't
+  silently do nothing -- the existing resume banner now says so
+  explicitly ("finish or discard it to start today's Daily Challenge"),
+  and the now-irrelevant generic quiz-config form underneath is
+  suppressed rather than shown alongside a banner that doesn't explain
+  itself. Resolving that other attempt (resume or discard) re-evaluates
+  automatically -- `inProgress` is already an effect dependency, no
+  manual retry needed.
+
+**A second, related gap found while tracing this:** neither
+`useDailyChallenge()`'s nor `useQuestions()`'s error state was ever
+surfaced in the auto-start branch -- if either query genuinely failed
+(not just "still loading"), the skeleton had no escape hatch at all, a
+literal infinite spinner. Both are now checked and render a real
+`ErrorState` with retry instead.
+
+### Same bug class, checked elsewhere
+
+Grepped for the same shape of defect (an unhandled query-error state
+inside an otherwise-working auto-acting flow) across the rest of
+`client/src`. Found one more, smaller instance: `command-palette.tsx`'s
+`useSearch()` call never checked `isError` either -- a genuine search
+failure rendered identically to "no results found," silently hiding a
+real error rather than just showing an empty list. Fixed: a failed search
+now shows its own message instead of pretending nothing matched.
+
+Also checked, both clean:
+- Every `<Link to="...">` target in `client/src` against the actual
+  registered route table in `router.tsx` -- no dead links.
+- Every `onClick` handler in `pages/`/`components/` for an empty or
+  console-only body -- none found.
+
+### Verification actually run
+
+`pnpm install` (node_modules had been stripped for the Phase 18
+deliverable zip, reinstalled from the committed lockfile -- unchanged),
+`pnpm -r typecheck` / `pnpm -r lint` / `pnpm -r build` -- all clean, same
+single pre-existing `main.tsx` warning as every prior pass, no new
+errors. Backend was not touched this pass (the bug and its fix are
+entirely `client/`-side; `quizzes.py`/`daily_challenge.py` were read
+extensively to trace the issue but not modified), so `ruff`/`py_compile`
+were not re-run -- nothing changed there to verify.
+
+### Explicitly not done this pass
+
+Everything under the brief's "COMPLETE FLOW VERIFICATION" / "MOBILE
+POLISH" / "ANIMATION POLISH" / "ACCESSIBILITY" / "PERFORMANCE" /
+"ADMIN PANEL" headings that isn't the specific bug class above --
+these need an actual browser (visual rendering, click-through, viewport
+testing, focus-ring inspection, animation smoothness) that isn't
+available in this environment. Static code reading is not a substitute
+for that and isn't presented as one here. If a real pre-release QA pass
+is wanted, it needs either a live deployed environment to test against,
+or a much narrower, named list of specific flows to trace through code
+one at a time the way the Daily Challenge bug was.
+

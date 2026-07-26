@@ -72,7 +72,7 @@ export function QuizPage() {
   const { data: wrongAnswerData } = useWrongAnswers();
   const { data: bookmarkData } = useBookmarksList();
   const { data: inProgress, isLoading: inProgressLoading } = useInProgressAttempt();
-  const { data: dailyChallenge } = useDailyChallenge();
+  const { data: dailyChallenge, isError: isDailyChallengeError, refetch: refetchDailyChallenge } = useDailyChallenge();
   const completeDailyChallenge = useCompleteDailyChallenge();
   const startAttempt = useStartQuizAttempt();
   const submitAttempt = useSubmitQuizAttempt();
@@ -88,18 +88,67 @@ export function QuizPage() {
   // student replays an already-completed challenge for practice).
   const [dailyChallengeProgressId, setDailyChallengeProgressId] = React.useState<string | null>(null);
   const [dailyChallengeFailed, setDailyChallengeFailed] = React.useState(false);
+  // ROOT CAUSE (release-QA pass): starting *any* quiz -- including the
+  // challenge itself -- inserts an "in-progress" `quiz_attempts` row, same
+  // as every other mode. If a student starts today's challenge and
+  // doesn't finish it in one sitting, `useInProgressAttempt()` returns
+  // that same attempt on every later visit -- the auto-start effect below
+  // used to see it and bail out silently and *permanently*, with nothing
+  // on screen connecting the resulting generic "interrupted quiz" banner
+  // back to the button the student actually clicked. Trivially
+  // reproducible: start the challenge, back out before finishing, click
+  // "Start Daily Challenge" again. Fixed below by telling the two cases
+  // apart instead of treating every in-progress attempt the same way.
+  const [dailyChallengeBlockedByOtherAttempt, setDailyChallengeBlockedByOtherAttempt] = React.useState(false);
   const dailyChallengeStartTriggered = React.useRef(false);
+
+  function sameQuestionSet(a: string[] | undefined, b: string[] | undefined): boolean {
+    if (!a || !b || a.length !== b.length) return false;
+    const sortedA = [...a].sort();
+    const sortedB = [...b].sort();
+    return sortedA.every((id, i) => id === sortedB[i]);
+  }
 
   // Arriving via `?mode=daily-challenge` (the Dashboard's Daily Challenge
   // card) skips the config form entirely and auto-starts today's set --
   // same reasoning `FUNCTIONAL_RECOMMENDATIONS.md` gave for this feature:
   // run it through the existing QuizRunner using the challenge's own
-  // `questionIds`, no separate quiz UI needed. Guarded against firing
-  // while an unrelated interrupted quiz is still waiting to be
-  // resumed/discarded -- that banner takes precedence.
+  // `questionIds`, no separate quiz UI needed.
   React.useEffect(() => {
-    if (!isDailyChallenge || stage.step !== "config" || inProgressLoading || inProgress) return;
-    if (!dailyChallenge || allQuestions.length === 0 || dailyChallengeStartTriggered.current) return;
+    if (!isDailyChallenge || stage.step !== "config" || inProgressLoading) return;
+    if (dailyChallengeStartTriggered.current) return;
+
+    if (inProgress) {
+      if (!dailyChallenge) return; // not enough info yet to tell the two cases apart -- wait, don't guess
+      // Same question set as today's challenge -> this *is* the
+      // challenge, abandoned mid-way. Resume it directly rather than
+      // silently blocking or showing a disconnected generic banner.
+      if (sameQuestionSet(inProgress.questionIds, dailyChallenge.questionIds)) {
+        setDailyChallengeBlockedByOtherAttempt(false);
+        dailyChallengeStartTriggered.current = true;
+        const questions = inProgress.questionIds
+          .map((id) => questionById.get(id))
+          .filter((q): q is Question => Boolean(q));
+        if (questions.length === 0) {
+          toast.error("Today's challenge questions aren't available anymore.");
+          setDailyChallengeFailed(true);
+          return;
+        }
+        setDailyChallengeProgressId(dailyChallenge.id);
+        setStage({ step: "active", attempt: inProgress, questions });
+        return;
+      }
+      // A genuinely different interrupted quiz -- don't guess, don't
+      // silently do nothing. Surface it explicitly (see the render logic
+      // below) instead of falling through to a generic config form. This
+      // re-evaluates automatically once that attempt is resumed/discarded
+      // (`inProgress` is an effect dependency), no manual retry needed.
+      setDailyChallengeBlockedByOtherAttempt(true);
+      return;
+    }
+    setDailyChallengeBlockedByOtherAttempt(false);
+
+    if (!dailyChallenge || allQuestions.length === 0) return;
     dailyChallengeStartTriggered.current = true;
 
     const questions = dailyChallenge.questionIds
@@ -214,6 +263,9 @@ export function QuizPage() {
                 <p className="text-xs text-muted-foreground">
                   {inProgress.questionIds.length} question{inProgress.questionIds.length === 1 ? "" : "s"}, started{" "}
                   {new Date(inProgress.startedAt).toLocaleString()}
+                  {isDailyChallenge && dailyChallengeBlockedByOtherAttempt && (
+                    <> — finish or discard it to start today's Daily Challenge.</>
+                  )}
                 </p>
               </div>
             </div>
@@ -229,24 +281,36 @@ export function QuizPage() {
         </Card>
       )}
 
-      {stage.step === "config" &&
-        (isLoading || (isDailyChallenge && !inProgress && !dailyChallengeFailed) ? (
-          <Skeleton className="h-72 w-full rounded-xl" />
-        ) : isError ? (
-          <ErrorState description="We couldn't load the question bank." onRetry={() => refetch()} />
-        ) : allQuestions.length === 0 ? (
-          <EmptyState
-            icon={Sparkles}
-            title="No questions to practice yet"
-            description="Upload a placement PDF in the PDF Library — extracted questions will show up here automatically."
-          />
-        ) : (
-          // `key` forces a remount (and fresh react-hook-form defaultValues)
-          // when the incoming mode changes between client-side navigations,
-          // e.g. Bookmarks -> Quiz then later Wrong Answers -> Quiz without
-          // a full page reload in between.
-          <QuizConfigForm key={configDefaultMode ?? "mixed"} onStart={handleStart} defaultMode={configDefaultMode} />
-        ))}
+      {stage.step === "config" && isDailyChallenge && dailyChallengeBlockedByOtherAttempt ? null : (
+        stage.step === "config" && (
+          isLoading || isDailyChallengeError || isError ? (
+            isDailyChallengeError ? (
+              <ErrorState
+                description="We couldn't load today's Daily Challenge."
+                onRetry={() => refetchDailyChallenge()}
+              />
+            ) : isError ? (
+              <ErrorState description="We couldn't load the question bank." onRetry={() => refetch()} />
+            ) : (
+              <Skeleton className="h-72 w-full rounded-xl" />
+            )
+          ) : isDailyChallenge && !inProgress && !dailyChallengeFailed ? (
+            <Skeleton className="h-72 w-full rounded-xl" />
+          ) : allQuestions.length === 0 ? (
+            <EmptyState
+              icon={Sparkles}
+              title="No questions to practice yet"
+              description="Upload a placement PDF in the PDF Library — extracted questions will show up here automatically."
+            />
+          ) : (
+            // `key` forces a remount (and fresh react-hook-form defaultValues)
+            // when the incoming mode changes between client-side navigations,
+            // e.g. Bookmarks -> Quiz then later Wrong Answers -> Quiz without
+            // a full page reload in between.
+            <QuizConfigForm key={configDefaultMode ?? "mixed"} onStart={handleStart} defaultMode={configDefaultMode} />
+          )
+        )
+      )}
 
       {stage.step === "active" &&
         (stage.questions.length === 0 ? (

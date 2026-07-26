@@ -64,7 +64,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     return () => clearTimeout(handle);
   }, [query]);
 
-  const { data, isLoading, isFetching } = useSearch(debouncedQuery);
+  const { data, isLoading, isFetching, isError } = useSearch(debouncedQuery);
   // `isLoading` alone would flash a stale "no results yet" state between
   // debounce ticks; `isFetching` covers "results exist but a newer query
   // is in flight" too.
@@ -212,6 +212,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                   <div key={i} className="h-11 animate-pulse rounded-lg bg-surface" />
                 ))}
               </div>
+            ) : isError ? (
+              <p className="px-3 py-10 text-center text-sm text-incorrect-500">
+                Search is having trouble right now — try again in a moment.
+              </p>
             ) : flatResults.length === 0 ? (
               <p className="px-3 py-10 text-center text-sm text-muted-foreground">
                 No matches for &ldquo;{trimmedQuery}&rdquo;.
