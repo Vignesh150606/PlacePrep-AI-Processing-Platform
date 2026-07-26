@@ -74,59 +74,57 @@ practice-trend-chart.tsx`, a new `hooks/use-quiz-trend.ts`.
 
 ---
 
-## 5. NEW -- Upload dropzone doesn't offer images yet
+## 5. DONE (Phase 18) -- Upload dropzone doesn't offer images yet
 
-**Problem:** the backend now accepts `image/png`/`image/jpeg` uploads
-(phone photos, screenshots of a question paper) alongside PDF, but
-`pdf-library-page.tsx`'s file input still has
-`accept="application/pdf"` and `UploadDropzone`'s validation still checks
-against `PDF_UPLOAD_CONSTRAINTS` specifically -- a user can't actually
-pick an image in their file browser, and if they somehow did (e.g.
-drag-and-drop, which doesn't respect `accept`), the client-side size/type
-check would incorrectly reject a valid image upload before it ever
-reaches the server.
+**Update:** fixed. `pdf-library-page.tsx`'s dropzone now accepts
+`UPLOAD_CONSTRAINTS.allowedMimeTypes` (PDF + PNG/JPEG), and validates each
+file against its own real backend cap (`PDF_UPLOAD_CONSTRAINTS` vs
+`IMAGE_UPLOAD_CONSTRAINTS` -- the combined constant's `maxSizeBytes` is
+the larger PDF figure, so using it for every file would have let an
+oversized image pass client-side only to be rejected by the server).
 
-**Suggested implementation:** swap the `accept` attribute and the
-validation constant to the new `UPLOAD_CONSTRAINTS` (combined PDF+image)
-exported from `shared/src/types/file-upload.ts` -- this was added
-specifically so this swap is a constant change, not a hand-written MIME
-list.
+**Problem (original, for context):** the backend accepted
+`image/png`/`image/jpeg` uploads (phone photos, screenshots of a question
+paper) alongside PDF, but the dropzone's file input still had
+`accept="application/pdf"` and validation still checked against
+`PDF_UPLOAD_CONSTRAINTS` specifically -- a user couldn't pick an image in
+their file browser, and drag-and-drop (which doesn't respect `accept`)
+would have incorrectly rejected a valid image before it ever reached the
+server.
 
-**Files likely involved:** `client/src/pages/pdf-library-page.tsx`.
+**Files involved:** `client/src/pages/pdf-library-page.tsx`.
 
 ---
 
-## 6. NEW -- Daily Challenge has no frontend yet; Search has a partial one
+## 6. DONE (Phase 18) -- Daily Challenge has no frontend yet; Search has a partial one
 
-**Problem:** both are real, working backend endpoints as of the Phase 6
-pass (`GET /daily-challenge/today`, `POST /daily-challenge/{id}/complete`,
-`GET /daily-challenge/streak`, `GET /search?q=`). Daily Challenge still
-has nothing in `client/` consuming it, and the nav still has a "Daily
-Challenge"-shaped gap (per `nav-items.ts`'s existing structure).
+**Update:** both fixed. `hooks/use-daily-challenge.ts` +
+`components/dashboard/daily-challenge-card.tsx` wire up the real
+`GET /daily-challenge/today`/`/streak` endpoints, and `quiz-page.tsx` now
+has a real `?mode=daily-challenge` auto-start flow that runs the
+challenge's `questionIds` through the existing `QuizRunner` and reports
+completion back via `POST /daily-challenge/{id}/complete`. Search:
+`hooks/use-search.ts` + a rewired `command-palette.tsx` now call the real
+`GET /search?q=` (debounced 250ms client-side) instead of filtering
+whatever was already sitting in each list hook's React Query cache.
 
-**Update (Sprint 1A frontend integration pass):** `TopNav`'s `SearchBar`
-now opens a real ⌘K command palette (`components/search/command-palette.tsx`)
-instead of sitting decorative with nothing behind it. It is **not yet**
-wired to `GET /search?q=` -- it searches whatever's already sitting in
-each of `useQuestions()`/`useCompanies()`/`usePdfs()`'s React Query
-cache. Fine at this app's current data volume; see `MERGE_NOTES.md`
-Part 3 and `PROJECT_STATE.md`'s Phase 7 list for the follow-up to switch
-it over to the real endpoint (debounced, server-side, no page-size
-ceiling).
+**Problem (original, for context):** both were real, working backend
+endpoints as of the Phase 6 pass. Daily Challenge had nothing in
+`client/` consuming it. The Sprint 1A command palette searched local
+React Query cache instead of the real endpoint -- incomplete for anyone
+who hadn't already loaded the full question bank into that cache that
+session.
 
-**Suggested implementation (Daily Challenge, still open):** a
-`DailyChallengeCard` (dashboard, plus maybe its own page) that calls
-`GET .../today`, runs it through the existing `QuizRunner` using its
-`questionIds`, then calls `POST .../complete` with the resulting
-`quizAttemptId`.
-
-**Files likely involved:** new `hooks/use-daily-challenge.ts` and
-`hooks/use-search.ts` (the latter to replace the command palette's
-client-cache filtering with a real debounced `GET /search?q=` call), a
-new dashboard card or page for Daily Challenge.
+**Files involved:** `client/src/hooks/use-daily-challenge.ts`,
+`client/src/hooks/use-search.ts`, `client/src/components/dashboard/
+daily-challenge-card.tsx`, `client/src/components/search/
+command-palette.tsx`, `client/src/pages/quiz-page.tsx`,
+`client/src/pages/dashboard-page.tsx`, `client/src/router.tsx`.
 
 ---
 
 None of the above blocked any pass -- everything in `MERGE_NOTES.md`
 was implementable with the data/endpoints already available at the time
-each pass ran.
+each pass ran. As of Phase 18, both items in this file are closed --
+see `PROJECT_STATE.md`'s Phase 18 entry for what's still open more
+broadly (this file only ever tracked these two specific gaps).

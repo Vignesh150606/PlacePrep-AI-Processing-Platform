@@ -9,11 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useSubmitAlumniProfile, useUpdateMyAlumniProfile } from "@/hooks/use-alumni";
-import { useCompanies } from "@/hooks/use-companies";
+import { CompanyCombobox } from "@/components/companies/company-combobox";
 import { ApiError } from "@/lib/api-client";
 
-const selectClass =
-  "h-9 rounded-lg border border-border bg-surface-raised px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const textareaClass =
   "min-h-16 rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -114,7 +112,6 @@ interface AlumniProfileDialogProps {
 }
 
 export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProfileDialogProps) {
-  const { data: companyData } = useCompanies();
   const submit = useSubmitAlumniProfile();
   const update = useUpdateMyAlumniProfile();
   const isEditing = !!existing;
@@ -129,7 +126,6 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
     if (open) reset(fromExisting(existing));
   }, [open, existing, reset]);
 
-  const companies = companyData?.items ?? [];
 
   function handleClose(next: boolean) {
     if (!next) reset(EMPTY_FORM);
@@ -202,14 +198,13 @@ export function AlumniProfileDialog({ open, onOpenChange, existing }: AlumniProf
                 control={control}
                 name="currentCompanyId"
                 render={({ field }) => (
-                  <select id="currentCompanyId" className={selectClass} {...field}>
-                    <option value="">None</option>
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <CompanyCombobox
+                    id="currentCompanyId"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    allowClear
+                    placeholder="None"
+                  />
                 )}
               />
             </div>

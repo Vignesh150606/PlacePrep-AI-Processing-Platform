@@ -48,6 +48,9 @@ const ResourceLibraryPage = React.lazy(() =>
 const AdminResourcesPage = React.lazy(() =>
   import("@/pages/admin-resources-page").then((m) => ({ default: m.AdminResourcesPage })),
 );
+const AdminCompaniesPage = React.lazy(() =>
+  import("@/pages/admin-companies-page").then((m) => ({ default: m.AdminCompaniesPage })),
+);
 const AlumniDirectoryPage = React.lazy(() =>
   import("@/pages/alumni-directory-page").then((m) => ({ default: m.AlumniDirectoryPage })),
 );
@@ -175,8 +178,12 @@ const adminBulkImportRoute = createRoute({
 // Bookmarks' "Practice bookmarks" and Wrong Answers' "Retry all" can land
 // directly in the right quiz mode instead of the generic form defaulting
 // to "mixed" (see quiz-config-form.tsx's `defaultMode` prop).
+// "daily-challenge" (Phase 18) is a route-level mode only -- it never
+// reaches `QuizConfigForm`'s own mode enum (quiz-config-form.tsx), since
+// arriving with this mode skips the config form entirely and auto-starts
+// today's challenge (see quiz-page.tsx).
 const quizSearchSchema = z.object({
-  mode: z.enum(["topic", "company", "mixed", "random", "wrong-answers", "bookmarks"]).optional(),
+  mode: z.enum(["topic", "company", "mixed", "random", "wrong-answers", "bookmarks", "daily-challenge"]).optional(),
 });
 
 export const quizRoute = createRoute({
@@ -334,6 +341,15 @@ const adminCommunityRoute = createRoute({
   path: "/admin/community",
   component: AdminCommunityPage,
 });
+
+// NEW (Phase 18). Same not-gated-at-the-route-level pattern as every other
+// admin route above -- backend endpoints are require_admin-gated and the
+// nav entry is hidden from non-admins (nav-items.ts).
+const adminCompaniesRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/admin/companies",
+  component: AdminCompaniesPage,
+});
 const notificationsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/notifications",
@@ -377,6 +393,7 @@ const routeTree = rootRoute.addChildren([
     adminResourcesRoute,
     adminAlumniRoute,
     adminCommunityRoute,
+    adminCompaniesRoute,
     adminQuestionBuilderRoute,
     adminBulkImportRoute,
     notificationsRoute,

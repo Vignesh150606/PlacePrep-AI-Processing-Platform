@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { PdfProcessingStatus } from "@placeprep/shared";
-import { PDF_UPLOAD_CONSTRAINTS } from "@placeprep/shared";
+import { IMAGE_UPLOAD_CONSTRAINTS, PDF_UPLOAD_CONSTRAINTS, UPLOAD_CONSTRAINTS } from "@placeprep/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -107,17 +107,26 @@ function UploadDropzone() {
 
   const handleFile = (file: File | undefined) => {
     if (!file) return;
-    if (!PDF_UPLOAD_CONSTRAINTS.allowedMimeTypes.includes(file.type)) {
-      toast.error("Only PDF files are accepted.");
+    if (!UPLOAD_CONSTRAINTS.allowedMimeTypes.includes(file.type)) {
+      toast.error("Only PDF, PNG, or JPEG files are accepted.");
       return;
     }
-    if (file.size > PDF_UPLOAD_CONSTRAINTS.maxSizeBytes) {
-      toast.error(`File exceeds the ${formatBytes(PDF_UPLOAD_CONSTRAINTS.maxSizeBytes)} limit.`);
+    // Each file type is checked against its own real backend cap
+    // (`IMAGE_UPLOAD_CONSTRAINTS` is deliberately smaller than
+    // `PDF_UPLOAD_CONSTRAINTS` -- see that constant's own docstring) --
+    // `UPLOAD_CONSTRAINTS.maxSizeBytes` is the PDF figure, so using it for
+    // every file would let an oversized image pass client-side only to be
+    // rejected by the server.
+    const constraints = PDF_UPLOAD_CONSTRAINTS.allowedMimeTypes.includes(file.type)
+      ? PDF_UPLOAD_CONSTRAINTS
+      : IMAGE_UPLOAD_CONSTRAINTS;
+    if (file.size > constraints.maxSizeBytes) {
+      toast.error(`File exceeds the ${formatBytes(constraints.maxSizeBytes)} limit.`);
       return;
     }
     setFileName(file.name);
     upload.mutate(
-      { file, title: file.name.replace(/\.pdf$/i, "") },
+      { file, title: file.name.replace(/\.(pdf|png|jpe?g)$/i, "") },
       {
         onSuccess: () => {
           toast.success(`"${file.name}" uploaded — waiting for admin approval.`);
@@ -189,12 +198,13 @@ function UploadDropzone() {
               ? `Uploading ${fileName ?? "file"}…`
               : state === "success"
                 ? "Uploaded — waiting for approval"
-                : "Drop a PDF here, or click to browse"}
+                : "Drop a PDF or photo here, or click to browse"}
           </p>
           <p className="text-xs text-muted-foreground">
-            PDF only, up to {formatBytes(PDF_UPLOAD_CONSTRAINTS.maxSizeBytes)}. An admin reviews every upload before
-            AI extraction runs — scanned pages are OCR'd automatically once approved, and large PDFs are split
-            into chunks.
+            PDF, PNG, or JPEG — PDFs up to {formatBytes(PDF_UPLOAD_CONSTRAINTS.maxSizeBytes)}, photos up to{" "}
+            {formatBytes(IMAGE_UPLOAD_CONSTRAINTS.maxSizeBytes)}. An admin reviews every upload before AI
+            extraction runs — scanned pages and photos are OCR'd automatically once approved, and large PDFs
+            are split into chunks.
           </p>
         </div>
 
@@ -207,7 +217,7 @@ function UploadDropzone() {
         <input
           ref={inputRef}
           type="file"
-          accept="application/pdf"
+          accept={UPLOAD_CONSTRAINTS.allowedMimeTypes.join(",")}
           className="hidden"
           onChange={(e) => {
             handleFile(e.target.files?.[0]);

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useSubmitResource } from "@/hooks/use-resources";
 import { useSubjects } from "@/hooks/use-subjects";
 import { useTopics } from "@/hooks/use-topics";
-import { useCompanies } from "@/hooks/use-companies";
+import { CompanyCombobox } from "@/components/companies/company-combobox";
 import { ApiError } from "@/lib/api-client";
 import { formatBytes } from "@/lib/format";
 
@@ -63,7 +63,7 @@ interface ResourceSubmissionDialogProps {
 
 export function ResourceSubmissionDialog({ open, onOpenChange }: ResourceSubmissionDialogProps) {
   const { data: subjectData } = useSubjects();
-  const { data: companyData } = useCompanies();
+
   const submit = useSubmitResource();
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -74,7 +74,6 @@ export function ResourceSubmissionDialog({ open, onOpenChange }: ResourceSubmiss
   });
 
   const subjects = subjectData?.items ?? [];
-  const companies = companyData?.items ?? [];
   const contentMode = watch("contentMode");
   const subjectId = watch("subjectId");
   const { data: topicData } = useTopics(subjectId || undefined);
@@ -246,14 +245,13 @@ export function ResourceSubmissionDialog({ open, onOpenChange }: ResourceSubmiss
                 control={control}
                 name="companyId"
                 render={({ field }) => (
-                  <select id="companyId" className={selectClass} {...field}>
-                    <option value="">None</option>
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <CompanyCombobox
+                    id="companyId"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    allowClear
+                    placeholder="None"
+                  />
                 )}
               />
             </div>

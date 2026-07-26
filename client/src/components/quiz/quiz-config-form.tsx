@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCompanies } from "@/hooks/use-companies";
+import { CompanyCombobox } from "@/components/companies/company-combobox";
 import { useQuestions } from "@/hooks/use-questions";
 import { useWrongAnswers } from "@/hooks/use-wrong-answers";
 import { useBookmarksList } from "@/hooks/use-bookmarks";
@@ -43,12 +43,10 @@ const TIME_LIMIT_OPTIONS: { label: string; value: number | null }[] = [
 ];
 
 export function QuizConfigForm({ onStart, defaultMode }: QuizConfigFormProps) {
-  const { data: companyData } = useCompanies();
   const { data: questionData } = useQuestions();
   const { data: wrongAnswerData } = useWrongAnswers();
   const { data: bookmarkData } = useBookmarksList();
 
-  const companies = companyData?.items ?? [];
   const topics = Array.from(
     new Set((questionData?.items ?? []).map((q) => q.topic).filter((t) => t.length > 0)),
   ).sort();
@@ -136,18 +134,12 @@ export function QuizConfigForm({ onStart, defaultMode }: QuizConfigFormProps) {
                 control={control}
                 name="companyId"
                 render={({ field }) => (
-                  <select
-                    {...field}
+                  <CompanyCombobox
                     id="company"
-                    className="h-9 rounded-lg border border-border bg-surface-raised px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">Select a company</option>
-                    {companies.map((company) => (
-                      <option key={company.id} value={company.id}>
-                        {company.name}
-                      </option>
-                    ))}
-                  </select>
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    placeholder="Search companies..."
+                  />
                 )}
               />
             </div>

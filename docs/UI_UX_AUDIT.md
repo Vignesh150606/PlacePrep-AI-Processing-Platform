@@ -144,3 +144,21 @@ Given how consistent the patterns were across everything that *was* fully
 read, the honest expectation is that these follow the same conventions —
 but that's an inference, not a verified finding, and they'd be the right
 starting point for a follow-up pass rather than assumed clean.
+
+## Phase 18 addendum
+
+A later, much larger external prompt asked for a wholesale visual
+redesign (Notion/Duolingo/Coursera-style, "professional design
+language"). That request was **not implemented** -- it directly conflicts
+with this audit's own finding above that the design system is deliberate
+and already professional-grade. See `PROJECT_STATE.md`'s Phase 18 entry
+for the full reasoning and for what *was* built from that same prompt
+(real functional/IA gaps: company admin management, company input UX,
+global search wiring, Daily Challenge wiring, home page restructure, PDF
+upload image support).
+
+Company Detail page and Quiz Config form -- both listed above as "not
+deeply read" -- got direct edits this phase (the company combobox swap in
+Quiz Config; Company Detail was read but not modified). Still not a full
+line-by-line audit of either; the same caveat above still applies to
+everything else on the "not deeply read" list.

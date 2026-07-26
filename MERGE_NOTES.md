@@ -269,3 +269,29 @@ desktop-only.
   implemented -- left that document unedited as a historical snapshot
   rather than rewritten, since `PROJECT_STATE.md` and this file are now
   the authoritative record of what's resolved.
+
+## Phase 18 -- Company Admin Management + Home/Search/Daily-Challenge UX (this pass)
+
+Departure from this file's usual shape: every prior part here merges two
+*separate* sessions (one scoped to `client/`, one to `server/`/`supabase/`/
+`@placeprep/shared`) that ran in parallel and needed reconciling. This
+pass was a single session covering both sides of one feature (company
+admin management genuinely needs its backend and frontend built together
+to be coherent -- a combobox with no create endpoint behind it, or a
+create endpoint no admin page ever calls, isn't a real deliverable either
+way). Noted here so a future merge doesn't go looking for a second
+session's output that doesn't exist this time.
+
+Full scope, design-review reasoning, and the complete verification
+transcript are in `PROJECT_STATE.md`'s own Phase 18 entry -- not
+duplicated here. Short version: backend (migration `0021`, `companies.py`
+rewrite, `company_merge.py`, a `search.py` fix) and frontend (`Combobox` +
+`CompanyCombobox` wired into 4 existing forms, `AdminCompaniesPage`,
+Daily Challenge hook/card/quiz-auto-start, real search wiring, dashboard
+restructure, PDF upload image support) were both built and both verified
+for real in this same pass -- `pnpm install/typecheck/lint/build` all
+green, backend `py_compile` + a real `app.main` import + `ruff --select F`
+all clean. No live Postgres or browser available here, so the migration
+and any visual/viewport claims are explicitly unverified, not silently
+assumed fine -- see `PROJECT_STATE.md` for exactly which claims fall into
+that bucket.

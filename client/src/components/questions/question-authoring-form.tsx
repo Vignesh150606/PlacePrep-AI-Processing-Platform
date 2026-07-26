@@ -8,7 +8,7 @@ import type { QuestionAuthoringInput } from "@placeprep/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCompanies } from "@/hooks/use-companies";
+import { CompanyCombobox } from "@/components/companies/company-combobox";
 import { useUploadQuestionAsset } from "@/hooks/use-question-authoring";
 import { cn } from "@/lib/utils";
 
@@ -141,8 +141,6 @@ export function QuestionAuthoringForm({
     defaultValues: initialValues ? toFormValues(initialValues) : emptyForm(),
   });
   const { fields, append, remove } = useFieldArray({ control, name: "options" });
-  const { data: companyData } = useCompanies();
-  const companies = companyData?.items ?? [];
   const uploadAsset = useUploadQuestionAsset();
   const [pendingAction, setPendingAction] = useState<"primary" | "secondary" | null>(null);
 
@@ -276,12 +274,20 @@ export function QuestionAuthoringForm({
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="companyName">Company (optional)</Label>
-          <Input id="companyName" list="authoring-companies" placeholder="e.g. Google" {...register("companyName")} />
-          <datalist id="authoring-companies">
-            {companies.map((c) => (
-              <option key={c.id} value={c.name} />
-            ))}
-          </datalist>
+          <Controller
+            control={control}
+            name="companyName"
+            render={({ field }) => (
+              <CompanyCombobox
+                id="companyName"
+                mode="name"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                allowClear
+                placeholder="e.g. Google"
+              />
+            )}
+          />
         </div>
       </div>
 

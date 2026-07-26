@@ -11,6 +11,7 @@ import {
   useStartQuizAttempt,
   useSubmitQuizAttempt,
 } from "@/hooks/use-quiz-attempts";
+import { useCompleteDailyChallenge, useDailyChallenge } from "@/hooks/use-daily-challenge";
 import { QuizConfigForm, type QuizConfig } from "@/components/quiz/quiz-config-form";
 import { QuizRunner } from "@/components/quiz/quiz-runner";
 import { QuizResult } from "@/components/quiz/quiz-result";
@@ -63,10 +64,16 @@ export function QuizPage() {
   // validates (see router.tsx) so Bookmarks/Wrong Answers CTAs land in the
   // right mode instead of the config form always defaulting to "mixed".
   const { mode: initialMode } = useSearch({ from: "/app-layout/quiz" });
+  // "daily-challenge" is a route-only mode -- it never reaches
+  // `QuizConfigForm`'s own (narrower) mode enum, see router.tsx.
+  const isDailyChallenge = initialMode === "daily-challenge";
+  const configDefaultMode = isDailyChallenge ? undefined : initialMode;
   const { data, isLoading, isError, refetch } = useQuestions();
   const { data: wrongAnswerData } = useWrongAnswers();
   const { data: bookmarkData } = useBookmarksList();
   const { data: inProgress, isLoading: inProgressLoading } = useInProgressAttempt();
+  const { data: dailyChallenge } = useDailyChallenge();
+  const completeDailyChallenge = useCompleteDailyChallenge();
   const startAttempt = useStartQuizAttempt();
   const submitAttempt = useSubmitQuizAttempt();
   const abandonAttempt = useAbandonQuizAttempt();
@@ -75,6 +82,58 @@ export function QuizPage() {
   const questionById = new Map(allQuestions.map((q) => [q.id, q]));
   const [stage, setStage] = React.useState<QuizStage>({ step: "config" });
   const [resumeDismissed, setResumeDismissed] = React.useState(false);
+  // Phase 18 -- Daily Challenge. Set once the challenge's own quiz attempt
+  // is started, so `handleComplete` knows to also call
+  // `POST /daily-challenge/{id}/complete` (idempotent server-side if the
+  // student replays an already-completed challenge for practice).
+  const [dailyChallengeProgressId, setDailyChallengeProgressId] = React.useState<string | null>(null);
+  const [dailyChallengeFailed, setDailyChallengeFailed] = React.useState(false);
+  const dailyChallengeStartTriggered = React.useRef(false);
+
+  // Arriving via `?mode=daily-challenge` (the Dashboard's Daily Challenge
+  // card) skips the config form entirely and auto-starts today's set --
+  // same reasoning `FUNCTIONAL_RECOMMENDATIONS.md` gave for this feature:
+  // run it through the existing QuizRunner using the challenge's own
+  // `questionIds`, no separate quiz UI needed. Guarded against firing
+  // while an unrelated interrupted quiz is still waiting to be
+  // resumed/discarded -- that banner takes precedence.
+  React.useEffect(() => {
+    if (!isDailyChallenge || stage.step !== "config" || inProgressLoading || inProgress) return;
+    if (!dailyChallenge || allQuestions.length === 0 || dailyChallengeStartTriggered.current) return;
+    dailyChallengeStartTriggered.current = true;
+
+    const questions = dailyChallenge.questionIds
+      .map((id) => questionById.get(id))
+      .filter((q): q is Question => Boolean(q));
+    if (questions.length === 0) {
+      toast.error("Today's challenge questions aren't available anymore.");
+      setDailyChallengeFailed(true);
+      return;
+    }
+    startAttempt
+      .mutateAsync({
+        // No dedicated `quiz_attempts.mode` value exists for this --
+        // functionally it's a weak-topic-weighted mixed set (see
+        // daily_challenge.py's own algorithm docstring), so "mixed" is
+        // the accurate existing value rather than a schema change for a
+        // label that's cosmetic at the attempt-history level.
+        mode: "mixed",
+        topic: null,
+        companyId: null,
+        difficulty: "mixed",
+        questionIds: questions.map((q) => q.id),
+        timeLimitMinutes: null,
+      })
+      .then((attempt) => {
+        setDailyChallengeProgressId(dailyChallenge.id);
+        setStage({ step: "active", attempt, questions });
+      })
+      .catch(() => {
+        toast.error("Couldn't start today's challenge.");
+        setDailyChallengeFailed(true);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDailyChallenge, stage.step, inProgressLoading, inProgress, dailyChallenge, allQuestions.length]);
 
   const wrongAnswerQuestionIds = new Set(
     (wrongAnswerData?.items ?? []).filter((w) => !w.resolved).map((w) => w.questionId),
@@ -125,6 +184,12 @@ export function QuizPage() {
     } catch {
       toast.error("Couldn't save this attempt — your score is shown below, but it wasn't recorded.");
     }
+    if (dailyChallengeProgressId) {
+      completeDailyChallenge.mutate(
+        { progressId: dailyChallengeProgressId, quizAttemptId: attempt.id },
+        { onError: () => toast.error("Score saved, but couldn't update today's challenge streak.") },
+      );
+    }
     setStage({ step: "results", questions, responses, timeTakenSeconds });
     const correctCount = responses.filter((r) => r.isCorrect).length;
     toast.success(`Quiz complete — ${correctCount}/${responses.length} correct`);
@@ -165,7 +230,7 @@ export function QuizPage() {
       )}
 
       {stage.step === "config" &&
-        (isLoading ? (
+        (isLoading || (isDailyChallenge && !inProgress && !dailyChallengeFailed) ? (
           <Skeleton className="h-72 w-full rounded-xl" />
         ) : isError ? (
           <ErrorState description="We couldn't load the question bank." onRetry={() => refetch()} />
@@ -180,7 +245,7 @@ export function QuizPage() {
           // when the incoming mode changes between client-side navigations,
           // e.g. Bookmarks -> Quiz then later Wrong Answers -> Quiz without
           // a full page reload in between.
-          <QuizConfigForm key={initialMode ?? "mixed"} onStart={handleStart} defaultMode={initialMode} />
+          <QuizConfigForm key={configDefaultMode ?? "mixed"} onStart={handleStart} defaultMode={configDefaultMode} />
         ))}
 
       {stage.step === "active" &&

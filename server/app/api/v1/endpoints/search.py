@@ -97,15 +97,21 @@ async def search(
         question_query = question_query.eq("status", "approved")
     question_rows = question_query.execute().data or []
 
-    company_rows = (
+    # Phase 18: companies now have the same archived/deleted lifecycle as
+    # questions/resources (migration 0021) -- apply the identical
+    # visibility rule the question branch above already has (non-admins
+    # never see a soft-deleted or archived row; admins see everything but
+    # deleted, same as `GET /companies`'s own default).
+    company_query = (
         admin_client.table("companies")
         .select("id, name, slug, tier")
         .ilike("name", like_pattern)
+        .is_("deleted_at", "null")
         .limit(_RESULTS_PER_TYPE)
-        .execute()
-        .data
-        or []
     )
+    if not admin:
+        company_query = company_query.eq("status", "active")
+    company_rows = company_query.execute().data or []
 
     pdf_rows = (
         admin_client.table("pdf_resources")

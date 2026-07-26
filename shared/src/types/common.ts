@@ -20,6 +20,17 @@ export type QuestionLifecycleStatus = ModerationStatus | "draft" | "archived";
  * admin-authored question can be, so its lifecycle has one fewer state. */
 export type ResourceLifecycleStatus = ModerationStatus | "archived";
 
+/** Phase 18 -- Company Admin Management. Companies were previously
+ * read-only (auto-upserted by classification, no admin create/update/
+ * archive endpoints existed at all -- see companies.py's pre-Phase-18
+ * docstring). Unlike `QuestionLifecycleStatus`/`ResourceLifecycleStatus`,
+ * a company never goes through draft/pending-review/approved/rejected --
+ * it's either live in the directory or archived out of it, so this is a
+ * deliberately smaller, two-state enum rather than reusing `ModerationStatus`
+ * for a workflow companies never actually have. Soft delete (`deletedAt`)
+ * is independent of `status`, same convention as questions/resources. */
+export type CompanyStatus = "active" | "archived";
+
 export interface PaginatedResult<T> {
   items: T[];
   total: number;

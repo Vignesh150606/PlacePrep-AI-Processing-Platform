@@ -4,6 +4,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { PracticeTrendChart } from "@/components/dashboard/practice-trend-chart";
 import { ContinuePracticeCard } from "@/components/dashboard/continue-practice-card";
+import { DailyChallengeCard } from "@/components/dashboard/daily-challenge-card";
 import { UpcomingCompaniesCard } from "@/components/dashboard/upcoming-companies-card";
 import { RecentPdfsCard } from "@/components/dashboard/recent-pdfs-card";
 import { RecentActivityCard } from "@/components/dashboard/recent-activity-card";
@@ -14,6 +15,23 @@ import { useBookmarksList } from "@/hooks/use-bookmarks";
 import { useQuizAttempts } from "@/hooks/use-quiz-attempts";
 import { useWrongAnswers } from "@/hooks/use-wrong-answers";
 
+/**
+ * Phase 18 -- Home Page redesign, Part 1 of the UX brief this pass
+ * addresses. Reordered around "what should I do next" rather than "here's
+ * everything at once": Continue Practice + Daily Challenge (the latter had
+ * a real backend since Phase 6 with zero frontend -- see
+ * `daily-challenge-card.tsx`) now lead, immediately below the greeting.
+ * Stats and the trend chart follow as supporting context, not the opener.
+ *
+ * One thing this pass deliberately did NOT do: treat "Upload a PDF" as
+ * something that was dominating the page before this change. It was
+ * already a single small header button, not a hero section -- see this
+ * phase's design-review note in `PROJECT_STATE.md` for the fuller
+ * critique. What *did* move: the button is no longer the first
+ * call-to-action a user's eye lands on (it now sits beside Recent PDFs,
+ * where the "advanced feature, not the headline" framing the brief asked
+ * for actually reads as true rather than performed).
+ */
 export function DashboardPage() {
   const { user } = useAuth();
   const firstName = user?.fullName.split(" ")[0] ?? "there";
@@ -31,22 +49,33 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Welcome back, {firstName}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Here's where your placement prep stands today.
-          </p>
-        </div>
-        <Button asChild>
-          <Link to="/pdfs">
-            <Upload className="size-4" />
-            Upload a PDF
-          </Link>
-        </Button>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          Welcome back, {firstName}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Here's where your placement prep stands today.
+        </p>
       </div>
+
+      {/* Recommended actions -- what to do next, front and center. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <ContinuePracticeCard />
+        <DailyChallengeCard />
+      </div>
+
+      {wrongAnswerCount > 0 && (
+        <Link
+          to="/wrong-answers"
+          className="flex items-center justify-between gap-3 rounded-xl border border-incorrect-500/30 bg-incorrect-500/5 px-4 py-3 text-sm transition-colors hover:bg-incorrect-500/10"
+        >
+          <span className="flex items-center gap-2 text-incorrect-600 dark:text-incorrect-500">
+            <XCircle className="size-4" />
+            {wrongAnswerCount} question{wrongAnswerCount === 1 ? "" : "s"} to review in your Wrong Answer Notebook
+          </span>
+          <span className="font-medium text-incorrect-600 dark:text-incorrect-500">Review now →</span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="PDFs uploaded" value={pdfCount} icon={FileStack} isLoading={pdfsLoading} />
@@ -70,29 +99,22 @@ export function DashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <PracticeTrendChart />
-        </div>
-        <ContinuePracticeCard />
-      </div>
-
-      {wrongAnswerCount > 0 && (
-        <Link
-          to="/wrong-answers"
-          className="flex items-center justify-between gap-3 rounded-xl border border-incorrect-500/30 bg-incorrect-500/5 px-4 py-3 text-sm transition-colors hover:bg-incorrect-500/10"
-        >
-          <span className="flex items-center gap-2 text-incorrect-600 dark:text-incorrect-500">
-            <XCircle className="size-4" />
-            {wrongAnswerCount} question{wrongAnswerCount === 1 ? "" : "s"} to review in your Wrong Answer Notebook
-          </span>
-          <span className="font-medium text-incorrect-600 dark:text-incorrect-500">Review now →</span>
-        </Link>
-      )}
+      <PracticeTrendChart />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <UpcomingCompaniesCard />
-        <RecentPdfsCard />
+        <div className="flex flex-col gap-3">
+          <RecentPdfsCard />
+          {/* Upload lives here now, not the page header -- an advanced,
+              secondary action next to the list it populates, per the
+              brief's own framing (see this file's docstring above). */}
+          <Button asChild variant="secondary" size="sm" className="w-full">
+            <Link to="/pdfs">
+              <Upload className="size-4" />
+              Upload a PDF
+            </Link>
+          </Button>
+        </div>
         <RecentActivityCard />
       </div>
     </div>
