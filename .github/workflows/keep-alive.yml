@@ -1,0 +1,68 @@
+name: Free-tier keep-alive
+
+# Prevents Supabase's free-tier project from auto-pausing after ~7 days
+# with no real database activity (a static ping doesn't count -- see
+# health.py's own docstring). Runs well under that window for safety
+# margin: if a run or two gets skipped (GitHub incident, etc.), there's
+# still time before the 7-day threshold is actually reached.
+#
+# WHAT THIS DOES NOT DO: undo a pause that's already happened. Once
+# Supabase actually pauses a project, only a manual "Restore" click in
+# its dashboard brings it back -- no endpoint, including this one, can
+# un-pause it automatically. This workflow is prevention, not a fix.
+# Supabase also emails the project owner ~1 week before pausing, as a
+# second safety net if this workflow itself ever stops running.
+#
+# Set the HEALTH_CHECK_URL repository variable to your deployed
+# backend's health endpoint (Settings -> Secrets and variables ->
+# Actions -> Variables -> New repository variable), e.g.
+#   https://placeprep-ai-processing-platform.onrender.com/api/v1/health
+# Falls back to that exact URL below if the variable isn't set, so this
+# works immediately for this deployment, but the variable is the
+# right place to update it if the backend ever moves hosts.
+
+on:
+  schedule:
+    - cron: "0 6 */3 * *" # every 3 days -- comfortably under Supabase's 7-day window
+  workflow_dispatch: {} # lets you trigger a manual run to test this any time
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit the health endpoint (with retries -- Render's own free tier can be cold-starting too)
+        env:
+          HEALTH_CHECK_URL: ${{ vars.HEALTH_CHECK_URL || 'https://placeprep-ai-processing-platform.onrender.com/api/v1/health' }}
+        run: |
+          set -euo pipefail
+          echo "Pinging: $HEALTH_CHECK_URL"
+
+          # Render's free tier can take 30-60s to cold-start; retry a
+          # few times with a generous per-attempt timeout rather than
+          # failing the whole workflow on the first (very plausible)
+          # cold-start timeout.
+          attempt=0
+          max_attempts=4
+          until [ "$attempt" -ge "$max_attempts" ]; do
+            attempt=$((attempt + 1))
+            echo "Attempt $attempt/$max_attempts..."
+            if response=$(curl -sS --max-time 90 --fail "$HEALTH_CHECK_URL"); then
+              echo "Response: $response"
+              # Check the body, not just the HTTP status -- a 200 with
+              # databaseReachable:false means the server answered but
+              # the one thing this workflow exists to do (touch the
+              # database) didn't actually happen.
+              if echo "$response" | grep -q '"databaseReachable":true' || echo "$response" | grep -q '"databaseReachable": true'; then
+                echo "Database reachable -- keep-alive succeeded."
+                exit 0
+              else
+                echo "Server responded but database_reachable was false. Treating as a failure so this shows up as a red X / notification."
+                exit 1
+              fi
+            fi
+            echo "Attempt $attempt failed, waiting before retry..."
+            sleep 15
+          done
+
+          echo "All $max_attempts attempts failed to reach $HEALTH_CHECK_URL."
+          exit 1

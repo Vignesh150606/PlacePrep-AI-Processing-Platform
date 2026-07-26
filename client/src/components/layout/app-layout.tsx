@@ -7,6 +7,7 @@ import { BottomTabBar } from "./bottom-tab-bar";
 import { RouteLoadingFallback } from "./route-loading-fallback";
 import { OfflineBanner } from "@/components/pwa/offline-banner";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { SlowRequestBanner } from "./slow-request-banner";
 import { MobileNavProvider } from "@/providers/mobile-nav-provider";
 
 export function AppLayout() {
@@ -14,6 +15,7 @@ export function AppLayout() {
     <MobileNavProvider>
       <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
         <OfflineBanner />
+        <SlowRequestBanner />
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <Sidebar />
           <div className="flex min-w-0 flex-1 flex-col">

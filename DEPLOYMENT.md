@@ -136,7 +136,9 @@ first setup.
 
 ## 4. Post-deploy checklist
 
-- [ ] `GET https://<render-url>/api/v1/health` returns `200` with `ok: true`
+- [ ] `GET https://<render-url>/api/v1/health` returns `200` with
+      `success: true` and, once Supabase env vars are set,
+      `data.databaseReachable: true`
 - [ ] Visiting the Vercel URL after the backend has been idle shows the
       "waking up the server" screen, not a blank page or console errors
 - [ ] Signing in with Google actually redirects back to the deployed
@@ -146,3 +148,12 @@ first setup.
       `ENVIRONMENT=production` took effect)
 - [ ] Uploading a PDF and a scanned/image question both succeed (confirms
       the `apt-get` system packages actually installed)
+- [ ] Set the `HEALTH_CHECK_URL` repository variable (Settings -> Secrets
+      and variables -> Actions -> Variables) to your deployed
+      `/api/v1/health` URL, so `.github/workflows/keep-alive.yml` pings
+      the right backend -- it falls back to this project's own Render URL
+      if unset, which is only correct for this exact deployment. This
+      workflow is what keeps the free-tier Supabase project from
+      auto-pausing after 7 days idle; confirm it once via the Actions
+      tab's "Run workflow" button rather than waiting for the first
+      scheduled run to find out it's misconfigured

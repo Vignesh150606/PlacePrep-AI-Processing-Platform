@@ -2520,3 +2520,94 @@ once this fix ships, for a student both with and without completed-quiz
 history (the weak-topics path and the brand-new-user random-fallback path
 are different code paths, both worth confirming).
 
+## Phase 21 -- Free-tier keep-alive + mid-session cold-start UX (this pass)
+
+Scope, chosen from a list of free-tier-compatible feature ideas: "cold-start
+loading UX" and "Supabase keep-alive." Audited first, per this project's own
+practice -- and it's a good thing this pass did, because the premise was
+half-wrong: initial-load cold-start UX already exists, built thoroughly in
+an earlier "Phase 16" (`boot-gate.tsx`). It waits for a real `/health`
+response before mounting anything, shows "Waking up the server..." with
+elapsed time, and even distinguishes a genuine cold-start timeout from a
+fast CORS/config-shaped failure. Re-implementing that would have been
+pure waste. What it deliberately does NOT cover -- and what this pass
+actually built -- is everything below.
+
+### 1. Mid-session cold starts (the real gap)
+
+BootGate intentionally flags itself "warm" (sessionStorage) after the
+first successful check and never checks again for the rest of the tab
+session -- correct, so it doesn't reappear on every client-side route
+change. The gap that leaves: if a tab sits open past Render's ~15-minute
+idle window, the instance falls back asleep, and the next request just
+hangs behind whatever plain skeleton that one query already shows -- no
+"hang on, waking up" messaging, reads as broken rather than slow.
+
+New: `slow-request-banner.tsx`, mounted in `AppLayout` next to the
+existing `OfflineBanner`. Uses React Query's global `useIsFetching()`/
+`useIsMutating()` counts (not per-query -- catches a slow cold start
+regardless of which button or page triggered it) with a 3-second delay
+before showing anything, so it never flashes on an ordinary request.
+
+### 2. Supabase auto-pause (genuinely unaddressed before this pass)
+
+Researched rather than assumed, since this materially affects the
+design: Supabase's free-tier pause (~7 days with no real database
+activity) does NOT self-heal on the next incoming request the way Render
+does -- once paused, only a manual "Restore" click in the Supabase
+dashboard brings it back. A keep-alive only works as *prevention*, run
+reliably before the 7-day window closes; it cannot fix an already-paused
+project. Also confirmed: the pause timer only resets on activity that
+actually reaches the database -- a plain "the process is up" ping,
+which is all the pre-existing `/health` endpoint did, does not count.
+
+Fixed both problems:
+- `health.py` now runs one cheap, real Supabase query
+  (`profiles.select("id").limit(1)`), wrapped so a Supabase hiccup or an
+  actual pause (Supabase answers HTTP 540 while paused) can never turn
+  the health check itself into a 500 -- `boot-gate.tsx`'s cold-start
+  detection depends on this endpoint always answering a plain 200.
+  `databaseReachable: false` in the body is the honest signal instead.
+- New `.github/workflows/keep-alive.yml`: scheduled every 3 days (safe
+  margin under the 7-day window) plus `workflow_dispatch` for a manual
+  test run, hits `/health` with retries (Render's own cold start can
+  make even the *keep-alive ping itself* time out on the first attempt),
+  and fails the job -- surfacing as a GitHub notification -- if
+  `databaseReachable` ever comes back false, rather than treating a bare
+  HTTP 200 as success when the one thing this workflow exists to do
+  didn't actually happen.
+- `DEPLOYMENT.md` updated: the `HEALTH_CHECK_URL` repo variable this
+  workflow needs, and a reminder to confirm it via a manual run rather
+  than finding out it's misconfigured from a paused project weeks later.
+
+### A small, pre-existing, unrelated fix made along the way
+
+`health.py`'s response `data` is a raw `dict`, not a `CamelModel` --
+Pydantic only auto-camelCases *declared model fields*, never the
+contents of a plain dict (confirmed against `community.py`'s
+`downloadUrl`/`fileName`, which are hand-camelCased for exactly this
+reason). The health endpoint was the one place still returning
+snake_case keys on the wire, inconsistent with every other endpoint in
+this API. Fixed while already in the file; confirmed nothing in the
+frontend parses the health response body besides `res.ok` (`boot-gate.tsx`),
+so this was safe to change.
+
+### Verification actually run
+
+`pnpm -r typecheck` / `lint` / `build` -- all clean, same single
+pre-existing `main.tsx` warning as every prior pass. Backend: `py_compile`
+clean, `ruff --select F` clean, full `app.main` import still registers
+133 routes. Beyond that, actually exercised the endpoint itself (not just
+imported it) via FastAPI's `TestClient` in-process -- confirmed a real
+200 response with the expected camelCased shape and
+`databaseReachable: false` (correct, since this sandbox has no real
+Supabase credentials configured). Manually verified the GitHub Actions
+workflow's grep-based success/failure check against both a true and a
+false `databaseReachable` response body.
+
+**Not run**: the workflow itself has not executed against the real
+deployment (no way to trigger a real GitHub Actions run from here) --
+recommend using the Actions tab's manual "Run workflow" button once this
+ships, per the new `DEPLOYMENT.md` checklist item, rather than waiting
+for the first scheduled run 3 days out to discover a misconfigured URL.
+
