@@ -2448,3 +2448,75 @@ is wanted, it needs either a live deployed environment to test against,
 or a much narrower, named list of specific flows to trace through code
 one at a time the way the Daily Challenge bug was.
 
+## Phase 20 -- Daily Challenge 500, root-caused from a real production traceback (this pass)
+
+Phase 19 shipped an error-handling fix for the Daily Challenge flow, on
+the reasoning that an unhandled query error there should show a real
+"Try again" state instead of an infinite spinner. That fix immediately
+proved itself: the user hit a live 500 from the deployed backend, and
+because of the Phase 19 fix, saw a proper error screen instead of a stuck
+loading screen -- then pulled the actual Render server logs, which is
+what made a real (not guessed) root cause possible here.
+
+### The bug
+
+Traceback from the live Render logs:
+
+```
+postgrest.exceptions.APIError: {'message': 'column questions.topic does not exist', 'code': '42703', ...}
+  File ".../daily_challenge.py", line 109, in _weak_topics_for_user
+    admin.table("questions").select("id, topic")...
+```
+
+`daily_challenge.py` (written in Phase 6) queried `questions.topic` as if
+it were a plain text column. It never has been -- topics are a
+many-to-many via `question_topics` -> `topics` (migration 0001), the
+exact same shape `questions.py`'s real, working list endpoint already
+joins through (`question_topics(topics(id, name, subject_id,
+subjects(id, name)))`), taking the first linked topic as each question's
+"primary" topic for display/filtering purposes. `daily_challenge.py` was
+written against an assumed schema shape that never matched reality, and
+because Daily Challenge had zero real frontend traffic from Phase 6 all
+the way until Phase 18, nothing ever actually ran this code against the
+live database until this user's deploy did.
+
+Two call sites had the same bug: `_weak_topics_for_user`'s
+`select("id, topic")`, and `_generate_today_challenge`'s
+`.eq("topic", topic)` filter when pulling more questions from a weak
+topic (would have failed the same way immediately after the first call
+site, had it gotten that far).
+
+### The fix
+
+Both now go through `question_topics` directly instead of a column that
+doesn't exist: `_weak_topics_for_user` selects `question_id, topic_id`
+from the junction table for the student's answered questions (same
+"first linked topic wins" convention `questions.py` already established,
+applied consistently rather than inventing a second scheme), and now
+returns topic **ids** rather than names internally, since the caller
+never needs to display them and an id sidesteps topic names not being
+guaranteed unique across different subjects. `_generate_today_challenge`
+resolves each weak topic id to its question ids via the same junction
+table, then filters those against `questions.status`/`deleted_at` as
+before -- two simple queries rather than a PostgREST embedded-resource
+filter (`question_topics!inner(...)`), which would be harder to get
+right without a live database available to check it against.
+
+### Verification actually run
+
+`py_compile` on the changed file and the full `server/` tree -- clean.
+Reinstalled the real `requirements.txt` into a venv and imported
+`app.main:app` directly -- still builds cleanly, all 133 routes register.
+`ruff check --select F` (real bugs: unused imports, undefined names) on
+the changed file -- clean. Grepped the rest of `server/` for the same
+`questions.topic` mistake -- no other occurrences found.
+
+**Not run, same limitation as every prior pass**: no live Supabase
+instance here, so the corrected queries were verified by careful reading
+against the actual migration 0001 schema (`question_topics(question_id,
+topic_id)`, confirmed column names) rather than by executing them.
+Recommend testing `GET /daily-challenge/today` against the real deploy
+once this fix ships, for a student both with and without completed-quiz
+history (the weak-topics path and the brand-new-user random-fallback path
+are different code paths, both worth confirming).
+

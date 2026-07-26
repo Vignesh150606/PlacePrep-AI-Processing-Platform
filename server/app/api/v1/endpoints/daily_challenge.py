@@ -30,6 +30,20 @@ increments `current_streak`; completing after a gap (or for the first
 time) resets it to 1; completing again on a day already marked complete
 is a no-op (idempotent -- a retried request or double-click can't inflate
 a streak).
+
+PRODUCTION BUG, FOUND AND FIXED (release-QA pass): `GET /today` 500'd on
+every real call -- `_weak_topics_for_user` and `_generate_today_challenge`
+both queried a `questions.topic` column that has never existed; topics
+are a many-to-many via `question_topics` -> `topics` (migration 0001),
+the same shape `questions.py`'s real, working list endpoint already joins
+through. This endpoint had zero real frontend traffic from Phase 6 (when
+it was written) until Phase 18 (when a frontend was finally built for
+it), so nothing ever exercised these two queries against the actual
+schema until a live deploy hit them for the first time and produced an
+unhandled `postgrest.exceptions.APIError: column questions.topic does not
+exist`. Fixed by querying `question_topics` directly instead of a
+nonexistent column -- see `_weak_topics_for_user`'s own docstring for the
+full explanation.
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -87,7 +101,28 @@ def _row_to_response(row: Dict[str, Any]) -> DailyChallengeResponse:
 def _weak_topics_for_user(admin, user_id: str) -> List[str]:
     """Same definition Analytics uses client-side: topics with at least
     `_MIN_ANSWERED_FOR_WEAK_TOPIC` answered (non-skipped) responses across
-    completed attempts, sorted lowest-accuracy-first."""
+    completed attempts, sorted lowest-accuracy-first.
+
+    PRODUCTION BUG FIX: this used to `select("id, topic")` directly off
+    `questions` -- there is no such column. `questions` -> topic is a
+    many-to-many via the `question_topics` junction -> `topics` (see
+    migration 0001), the exact same shape `questions.py`'s real, working
+    list endpoint already joins through. That endpoint's own response
+    flattening (`_row_to_response`: `topic_links[0]` -- take whichever
+    topic comes back first) is the established "a question's *primary*
+    topic" convention this app already uses everywhere else (quiz
+    filtering, the Question type's own `topic: string` field); mirrored
+    here rather than inventing a second, different multi-topic scheme.
+    This had zero real traffic before Daily Challenge got a frontend
+    (Phase 18), so nothing ever exercised this query against the real
+    schema until then.
+
+    Returns topic **ids**, not names -- the caller only ever uses this to
+    query `question_topics` again for more same-topic questions, never to
+    display a name, and an id sidesteps `topics.name` not being guaranteed
+    unique across different subjects (two subjects could each have their
+    own "Arrays" topic row).
+    """
     attempts = (
         admin.table("quiz_attempts")
         .select("responses")
@@ -105,46 +140,70 @@ def _weak_topics_for_user(admin, user_id: str) -> List[str]:
         return []
 
     question_ids = list({r["questionId"] for r in answered})
-    question_rows = (
-        admin.table("questions").select("id, topic").in_("id", question_ids).execute().data or []
+    topic_links = (
+        admin.table("question_topics")
+        .select("question_id, topic_id")
+        .in_("question_id", question_ids)
+        .execute()
+        .data
+        or []
     )
-    topic_by_question = {r["id"]: r.get("topic") for r in question_rows if r.get("topic")}
+    # Same "first one wins" primary-topic convention as questions.py's
+    # `_row_to_response` -- a question with more than one linked topic
+    # just takes whichever link comes back first for this purpose.
+    topic_by_question: Dict[str, str] = {}
+    for link in topic_links:
+        topic_by_question.setdefault(link["question_id"], link["topic_id"])
 
     stats: Dict[str, Dict[str, int]] = {}
     for response in answered:
-        topic = topic_by_question.get(response["questionId"])
-        if not topic:
+        topic_id = topic_by_question.get(response["questionId"])
+        if not topic_id:
             continue
-        bucket = stats.setdefault(topic, {"attempted": 0, "correct": 0})
+        bucket = stats.setdefault(topic_id, {"attempted": 0, "correct": 0})
         bucket["attempted"] += 1
         if response.get("isCorrect"):
             bucket["correct"] += 1
 
     scored = [
-        (topic, s["correct"] / s["attempted"])
-        for topic, s in stats.items()
+        (topic_id, s["correct"] / s["attempted"])
+        for topic_id, s in stats.items()
         if s["attempted"] >= _MIN_ANSWERED_FOR_WEAK_TOPIC
     ]
     scored.sort(key=lambda pair: pair[1])
-    return [topic for topic, _accuracy in scored]
+    return [topic_id for topic_id, _accuracy in scored]
 
 
 def _generate_today_challenge(admin, user_id: str) -> Dict[str, Any]:
     settings = get_settings()
-    weak_topics = _weak_topics_for_user(admin, user_id)
+    weak_topic_ids = _weak_topics_for_user(admin, user_id)
 
     selected_ids: List[str] = []
     weak_topic_count = 0
 
-    for topic in weak_topics:
+    for topic_id in weak_topic_ids:
         if len(selected_ids) >= settings.DAILY_CHALLENGE_WEAK_TOPIC_SLOTS:
             break
+        # Same production bug as above: `questions.topic` doesn't exist.
+        # Resolve the topic's question ids via the junction table first,
+        # then filter those against `questions` (status/deleted_at) --
+        # two simple queries, rather than a PostgREST embedded-resource
+        # filter (`question_topics!inner(...)`) that's harder to get right
+        # without a live database to check it against.
+        topic_question_ids = [
+            row["question_id"]
+            for row in (
+                admin.table("question_topics").select("question_id").eq("topic_id", topic_id).execute().data or []
+            )
+        ]
+        if not topic_question_ids:
+            continue
         rows = (
             admin.table("questions")
             .select("id")
             .eq("status", "approved")
             .is_("deleted_at", "null")
-            .eq("topic", topic)
+            .in_("id", topic_question_ids)
             .not_.in_("id", selected_ids or ["00000000-0000-0000-0000-000000000000"])
             .limit(3)
             .execute()
